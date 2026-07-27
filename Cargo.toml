@@ -1,0 +1,36 @@
+[package]
+name = "kudu"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "VM TUI Manager"
+readme = "README.md"
+homepage = "https://github.com/pythops/kudu"
+repository = "https://github.com/pythops/kudu"
+
+[dependencies]
+crossterm = "0.29"
+ratatui = "0.30"
+tui-input = { version = "0.15", features = [
+    "crossterm",
+], default-features = false }
+dirs = "6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive", "cargo"] }
+anyhow = "1"
+chrono = "0.4"
+strum = { version = "0.28", features = ["derive"] }
+strum_macros = "0.28"
+uuid = { version = "1", features = ["v4", "serde"] }
+libc = "0.2"
+reqwest = { version = "0.13.4", features = ["blocking", "stream"] }
+qapi = { version = "0.15", features = ["qmp"] }
+which = "8"
+kvm-ioctls = "0.25.0"
+rustix = { version = "1", features = ["fs"] }
+
+[profile.release]
+lto = "fat"
+strip = true
+codegen-units = 1

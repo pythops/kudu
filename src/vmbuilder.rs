@@ -1,0 +1,1022 @@
+use anyhow::Result;
+use std::{
+    mem::discriminant,
+    path::PathBuf,
+    sync::{Arc, atomic::AtomicBool, mpsc::Sender},
+};
+
+use crossterm::event::{
+    KeyCode::{self, Char},
+    KeyEvent,
+};
+
+use qapi::qmp::RunState;
+use ratatui::{
+    Frame,
+    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
+    style::{Color, Style, Stylize},
+    text::{Line, Span, Text},
+    widgets::{Block, BorderType, Borders, Clear, List, ListState, Padding},
+};
+use tui_input::{Input, backend::crossterm::EventHandler};
+
+use crate::{
+    Arch,
+    cloudinit::Cloudinit,
+    confirmation::Confirmation,
+    distro::{
+        LinuxDistro::{self, ArchLinux},
+        debian::DebianRelease,
+        ubuntu::UbuntuRelease,
+    },
+    event::Event,
+    qemu::Network,
+    vm::VM,
+};
+
+#[derive(Debug, Clone, Default)]
+struct UserInputField {
+    field: Input,
+    error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum Section {
+    Distro(DistroSection),
+    Hardware(HardwareSection),
+    Disk,
+    Network,
+    Summary,
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
+enum DistroSection {
+    #[default]
+    Name,
+    OS,
+    Release,
+    Cloudinit,
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
+enum HardwareSection {
+    #[default]
+    Cpu,
+    Arch,
+    Memory,
+    Uefi,
+}
+
+#[derive(Debug, Clone)]
+pub struct VMBuilder {
+    focused_section: Section,
+    pub arch: Arch,
+    name: UserInputField,
+    cloudinit: UserInputField,
+    pub distro: LinuxDistro,
+    vcpus: UserInputField,
+    memory: UserInputField,
+    pub insert_mode: bool,
+    pub network: Network,
+    pub confirmation: Option<Confirmation>,
+    enable_uefi: bool,
+    ubuntu_release: UbuntuRelease,
+    debian_release: DebianRelease,
+}
+
+impl Default for VMBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl VMBuilder {
+    pub fn new() -> VMBuilder {
+        Self {
+            focused_section: Section::Distro(DistroSection::Name),
+            arch: Arch::default(),
+            name: UserInputField {
+                field: Input::default(),
+                error: None,
+            },
+            distro: LinuxDistro::default(),
+            vcpus: UserInputField {
+                field: Input::from("1"),
+                error: None,
+            },
+            memory: UserInputField {
+                field: Input::from("512"),
+                error: None,
+            },
+            cloudinit: UserInputField {
+                field: Input::default(),
+                error: None,
+            },
+            insert_mode: false,
+            network: Network::default(),
+            confirmation: None,
+            enable_uefi: true,
+            ubuntu_release: UbuntuRelease::default(),
+            debian_release: DebianRelease::default(),
+        }
+    }
+
+    pub fn build(&self) -> VM {
+        let distro = match self.distro {
+            LinuxDistro::Debian(_) => LinuxDistro::Debian(self.debian_release),
+            LinuxDistro::Ubuntu(_) => LinuxDistro::Ubuntu(self.ubuntu_release),
+            ArchLinux => ArchLinux,
+        };
+
+        VM {
+            id: uuid::Uuid::new_v4(),
+            arch: self.arch,
+            name: self.name.field.to_string(),
+            vcpus: self.vcpus.field.to_string().parse::<u16>().unwrap(),
+            memory: self.memory.field.to_string().parse::<u32>().unwrap(),
+            state: RunState::shutdown,
+            distro,
+            events: Vec::new(),
+            events_state: ListState::default(),
+            vnc: None,
+            cloudinit: Cloudinit::from_path(self.cloudinit.field.value()).ok(),
+            enable_uefi: self.enable_uefi,
+            uefi: None,
+            downloading: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    fn validate_distro_section(&mut self) -> bool {
+        let mut valid = true;
+
+        self.name.error = None;
+        self.cloudinit.error = None;
+
+        if self.name.field.value().is_empty() {
+            self.name.error = Some("Field required".into());
+            valid = false;
+        }
+
+        if !self.cloudinit.field.value().is_empty()
+            && !PathBuf::from(self.cloudinit.field.value()).exists()
+        {
+            self.cloudinit.error = Some("Cloudinit file does not exists".into());
+            valid = false;
+        }
+
+        valid
+    }
+
+    fn validate_harware_section(&mut self) -> bool {
+        let mut valid = true;
+
+        self.vcpus.error = None;
+        self.memory.error = None;
+
+        if self.vcpus.field.value().is_empty() {
+            self.vcpus.error = Some("Field required".into());
+            valid = false;
+        } else {
+            match self.vcpus.field.value().parse::<u16>() {
+                Ok(v) => {
+                    if v == 0 {
+                        self.vcpus.error = Some("vcpu value can not be 0".into());
+                        valid = false;
+                    }
+                }
+                Err(_) => {
+                    self.vcpus.error = Some("vcpu value should be a number".into());
+                    valid = false;
+                }
+            }
+        };
+
+        if self.memory.field.value().is_empty() {
+            self.memory.error = Some("Field required".into());
+            valid = false;
+        } else {
+            match self.memory.field.value().parse::<u32>() {
+                Ok(v) => {
+                    if v == 0 {
+                        self.memory.error = Some("Memory value can not be 0".into());
+                        valid = false;
+                    }
+                }
+                Err(_) => {
+                    self.memory.error = Some("Memory value should be a number".into());
+                    valid = false;
+                }
+            }
+        };
+        valid
+    }
+
+    pub fn handle_key_events(&mut self, key_event: KeyEvent, sender: Sender<Event>) -> Result<()> {
+        if self.confirmation.is_some() && key_event.code == KeyCode::Esc {
+            self.confirmation = None;
+            return Ok(());
+        }
+
+        if let Some(confirmation) = &mut self.confirmation {
+            confirmation.handle_key_events(key_event, sender)?;
+            return Ok(());
+        }
+
+        if !self.insert_mode && key_event.code == KeyCode::Char('q') {
+            self.confirmation = Some(Confirmation::default());
+            return Ok(());
+        }
+
+        match key_event.code {
+            KeyCode::Tab => match self.focused_section {
+                Section::Distro(_) => {
+                    if self.validate_distro_section() {
+                        self.focused_section = Section::Hardware(HardwareSection::default());
+                    }
+                }
+                Section::Hardware(_) => {
+                    if self.validate_harware_section() {
+                        self.focused_section = Section::Disk;
+                    }
+                }
+                Section::Disk => self.focused_section = Section::Network,
+                Section::Network => self.focused_section = Section::Summary,
+                Section::Summary => {
+                    self.focused_section = Section::Distro(DistroSection::default())
+                }
+            },
+            KeyCode::BackTab => match self.focused_section {
+                Section::Distro(_) => {
+                    if self.validate_distro_section() {
+                        self.focused_section = Section::Summary;
+                    }
+                }
+                Section::Hardware(_) => {
+                    if self.validate_harware_section() {
+                        self.focused_section = Section::Distro(DistroSection::default());
+                    }
+                }
+                Section::Disk => {
+                    self.focused_section = Section::Hardware(HardwareSection::default())
+                }
+                Section::Network => self.focused_section = Section::Disk,
+                Section::Summary => self.focused_section = Section::Network,
+            },
+            _ => match &self.focused_section {
+                Section::Distro(distro_section) => {
+                    if key_event.code == KeyCode::Esc {
+                        self.insert_mode = false;
+                        return Ok(());
+                    }
+
+                    if !self.insert_mode && key_event.code == Char('i') {
+                        self.insert_mode = true;
+                        return Ok(());
+                    }
+                    match distro_section {
+                        DistroSection::Name => {
+                            if self.insert_mode {
+                                self.name
+                                    .field
+                                    .handle_event(&crossterm::event::Event::Key(key_event));
+                            } else {
+                                match key_event.code {
+                                    KeyCode::Up | KeyCode::Char('k')
+                                        if self.validate_distro_section() =>
+                                    {
+                                        self.focused_section =
+                                            Section::Distro(DistroSection::Cloudinit);
+                                    }
+                                    KeyCode::Down | KeyCode::Char('j')
+                                        if self.validate_distro_section() =>
+                                    {
+                                        self.focused_section = Section::Distro(DistroSection::OS);
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        DistroSection::OS => match key_event.code {
+                            KeyCode::Up | KeyCode::Char('k') => {
+                                self.focused_section = Section::Distro(DistroSection::Name);
+                            }
+                            KeyCode::Down | KeyCode::Char('j') => {
+                                self.focused_section = Section::Distro(DistroSection::Release);
+                            }
+                            KeyCode::Left | KeyCode::Char('h') => match self.distro {
+                                LinuxDistro::Debian(_) => {
+                                    self.distro = LinuxDistro::Ubuntu(UbuntuRelease::default());
+                                }
+                                LinuxDistro::Ubuntu(_) => {
+                                    self.distro = LinuxDistro::ArchLinux;
+                                }
+                                LinuxDistro::ArchLinux => {
+                                    self.distro = LinuxDistro::Debian(DebianRelease::default());
+                                }
+                            },
+                            KeyCode::Right | KeyCode::Char('l') => match self.distro {
+                                LinuxDistro::Debian(_) => {
+                                    self.distro = LinuxDistro::ArchLinux;
+                                }
+                                LinuxDistro::Ubuntu(_) => {
+                                    self.distro = LinuxDistro::Debian(DebianRelease::default());
+                                }
+                                LinuxDistro::ArchLinux => {
+                                    self.distro = LinuxDistro::Ubuntu(UbuntuRelease::default());
+                                }
+                            },
+                            _ => {}
+                        },
+                        DistroSection::Release => match key_event.code {
+                            KeyCode::Up | KeyCode::Char('k') => {
+                                self.focused_section = Section::Distro(DistroSection::OS);
+                            }
+                            KeyCode::Down | KeyCode::Char('j') => {
+                                self.focused_section = Section::Distro(DistroSection::Cloudinit);
+                            }
+                            KeyCode::Right | KeyCode::Char('l') => match self.distro {
+                                LinuxDistro::ArchLinux => {}
+                                LinuxDistro::Debian(_) => match self.debian_release {
+                                    DebianRelease::Trixie => {
+                                        self.debian_release = DebianRelease::Bookworm;
+                                    }
+                                    DebianRelease::Bookworm => {
+                                        self.debian_release = DebianRelease::Forky;
+                                    }
+                                    DebianRelease::Forky => {
+                                        self.debian_release = DebianRelease::Trixie;
+                                    }
+                                },
+                                LinuxDistro::Ubuntu(_) => match self.ubuntu_release {
+                                    UbuntuRelease::Resolute => {
+                                        self.ubuntu_release = UbuntuRelease::Noble;
+                                    }
+                                    UbuntuRelease::Noble => {
+                                        self.ubuntu_release = UbuntuRelease::Jammy;
+                                    }
+                                    UbuntuRelease::Jammy => {
+                                        self.ubuntu_release = UbuntuRelease::Resolute;
+                                    }
+                                },
+                            },
+                            KeyCode::Left | KeyCode::Char('h') => match self.distro {
+                                LinuxDistro::ArchLinux => {}
+                                LinuxDistro::Debian(_) => match self.debian_release {
+                                    DebianRelease::Trixie => {
+                                        self.debian_release = DebianRelease::Forky;
+                                    }
+                                    DebianRelease::Bookworm => {
+                                        self.debian_release = DebianRelease::Trixie;
+                                    }
+                                    DebianRelease::Forky => {
+                                        self.debian_release = DebianRelease::Bookworm;
+                                    }
+                                },
+                                LinuxDistro::Ubuntu(_) => match self.ubuntu_release {
+                                    UbuntuRelease::Resolute => {
+                                        self.ubuntu_release = UbuntuRelease::Jammy;
+                                    }
+                                    UbuntuRelease::Noble => {
+                                        self.ubuntu_release = UbuntuRelease::Resolute;
+                                    }
+                                    UbuntuRelease::Jammy => {
+                                        self.ubuntu_release = UbuntuRelease::Noble;
+                                    }
+                                },
+                            },
+                            _ => {}
+                        },
+                        DistroSection::Cloudinit => {
+                            if self.insert_mode {
+                                self.cloudinit
+                                    .field
+                                    .handle_event(&crossterm::event::Event::Key(key_event));
+                            } else {
+                                match key_event.code {
+                                    KeyCode::Up | KeyCode::Char('k')
+                                        if self.validate_distro_section() =>
+                                    {
+                                        self.focused_section =
+                                            Section::Distro(DistroSection::Release);
+                                    }
+                                    KeyCode::Down | KeyCode::Char('j')
+                                        if self.validate_distro_section() =>
+                                    {
+                                        self.focused_section = Section::Distro(DistroSection::Name);
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                }
+                Section::Hardware(hardware_section) => {
+                    if key_event.code == KeyCode::Esc {
+                        self.insert_mode = false;
+                        return Ok(());
+                    }
+
+                    if !self.insert_mode && key_event.code == Char('i') {
+                        self.insert_mode = true;
+                        return Ok(());
+                    }
+                    match hardware_section {
+                        HardwareSection::Cpu => {
+                            if self.insert_mode {
+                                self.vcpus
+                                    .field
+                                    .handle_event(&crossterm::event::Event::Key(key_event));
+                            } else {
+                                match key_event.code {
+                                    KeyCode::Up | KeyCode::Char('k')
+                                        if self.validate_harware_section() =>
+                                    {
+                                        self.focused_section =
+                                            Section::Hardware(HardwareSection::Uefi);
+                                    }
+                                    KeyCode::Down | KeyCode::Char('j')
+                                        if self.validate_harware_section() =>
+                                    {
+                                        self.focused_section =
+                                            Section::Hardware(HardwareSection::Memory);
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        HardwareSection::Memory => {
+                            if self.insert_mode {
+                                self.memory
+                                    .field
+                                    .handle_event(&crossterm::event::Event::Key(key_event));
+                            } else {
+                                match key_event.code {
+                                    KeyCode::Up | KeyCode::Char('k')
+                                        if self.validate_harware_section() =>
+                                    {
+                                        self.focused_section =
+                                            Section::Hardware(HardwareSection::Cpu);
+                                    }
+                                    KeyCode::Down | KeyCode::Char('j')
+                                        if self.validate_harware_section() =>
+                                    {
+                                        self.focused_section =
+                                            Section::Hardware(HardwareSection::Arch);
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        HardwareSection::Arch => match key_event.code {
+                            KeyCode::Right | KeyCode::Char('l') => match self.arch {
+                                Arch::X86_64 => {
+                                    self.arch = Arch::Riscv64;
+                                }
+                                Arch::Aarch64 => {
+                                    self.arch = Arch::X86_64;
+                                }
+                                Arch::Riscv64 => {
+                                    self.arch = Arch::Aarch64;
+                                }
+                            },
+                            KeyCode::Left | KeyCode::Char('h') => match self.arch {
+                                Arch::X86_64 => {
+                                    self.arch = Arch::Aarch64;
+                                }
+                                Arch::Aarch64 => {
+                                    self.arch = Arch::Riscv64;
+                                }
+                                Arch::Riscv64 => {
+                                    self.arch = Arch::X86_64;
+                                }
+                            },
+                            KeyCode::Up | KeyCode::Char('k') => {
+                                self.focused_section = Section::Hardware(HardwareSection::Memory);
+                            }
+                            KeyCode::Down | KeyCode::Char('j') => {
+                                self.focused_section = Section::Hardware(HardwareSection::Uefi);
+                            }
+                            _ => {}
+                        },
+                        HardwareSection::Uefi => match key_event.code {
+                            KeyCode::Right
+                            | KeyCode::Char('l')
+                            | KeyCode::Left
+                            | KeyCode::Char('h')
+                                if self.arch == Arch::X86_64 =>
+                            {
+                                self.enable_uefi = !self.enable_uefi;
+                            }
+                            KeyCode::Up | KeyCode::Char('k') => {
+                                self.focused_section = Section::Hardware(HardwareSection::Arch);
+                            }
+                            KeyCode::Down | KeyCode::Char('j') => {
+                                self.focused_section = Section::Hardware(HardwareSection::Cpu);
+                            }
+                            _ => {}
+                        },
+                    }
+                }
+                Section::Summary if key_event.code == KeyCode::Enter => {
+                    let vm = self.build();
+                    sender.send(Event::VMCreated(vm))?;
+                }
+                _ => {}
+            },
+        }
+
+        Ok(())
+    }
+
+    fn title_span(&self, section: Section) -> Span<'_> {
+        let is_focused = discriminant(&self.focused_section) == discriminant(&section);
+        match section {
+            Section::Distro(_) => {
+                if is_focused {
+                    Span::styled(
+                        "   Distro   ",
+                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
+                    )
+                } else {
+                    Span::from("   Distro   ").fg(Color::DarkGray)
+                }
+            }
+            Section::Hardware(_) => {
+                if is_focused {
+                    Span::styled(
+                        "  Hardware  ",
+                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
+                    )
+                } else {
+                    Span::from("  Hardware  ").fg(Color::DarkGray)
+                }
+            }
+            Section::Disk => {
+                if is_focused {
+                    Span::styled(
+                        "    Disk    ",
+                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
+                    )
+                } else {
+                    Span::from("    Disk    ").fg(Color::DarkGray)
+                }
+            }
+            Section::Network => {
+                if is_focused {
+                    Span::styled(
+                        "  Network   ",
+                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
+                    )
+                } else {
+                    Span::from("  Network   ").fg(Color::DarkGray)
+                }
+            }
+            Section::Summary => {
+                if is_focused {
+                    Span::styled(
+                        "  Summary   ",
+                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
+                    )
+                } else {
+                    Span::from("  Summary   ").fg(Color::DarkGray)
+                }
+            }
+        }
+    }
+    fn render_header(&self, frame: &mut Frame, block: Rect) {
+        frame.render_widget(
+            Block::default()
+                .title({
+                    Line::from(vec![
+                        self.title_span(Section::Distro(DistroSection::Name)),
+                        self.title_span(Section::Hardware(HardwareSection::Cpu)),
+                        self.title_span(Section::Disk),
+                        self.title_span(Section::Network),
+                        self.title_span(Section::Summary),
+                    ])
+                })
+                .title_alignment(Alignment::Center)
+                .padding(Padding::top(1)),
+            block,
+        );
+    }
+
+    pub fn render(&self, frame: &mut Frame) {
+        let area = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Fill(1),
+                Constraint::Percentage(80),
+                Constraint::Fill(1),
+            ])
+            .margin(1)
+            .split(frame.area())[1];
+
+        let area = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Fill(1),
+                Constraint::Length(80),
+                Constraint::Fill(1),
+            ])
+            .margin(1)
+            .split(area)[1];
+
+        frame.render_widget(Clear, area);
+
+        frame.render_widget(
+            Block::new()
+                .title(" New VM 󰏖  ")
+                .title_alignment(ratatui::layout::HorizontalAlignment::Center)
+                .borders(Borders::all())
+                .border_type(if self.confirmation.is_some() {
+                    BorderType::default()
+                } else {
+                    BorderType::Thick
+                })
+                .border_style(Style::default().yellow()),
+            area,
+        );
+
+        let area = area.inner(Margin {
+            horizontal: 5,
+            vertical: 2,
+        });
+
+        let (section_block, area, insert_mode_block) = {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(1),
+                    Constraint::Fill(1),
+                    Constraint::Length(1),
+                ])
+                .flex(ratatui::layout::Flex::SpaceBetween)
+                .split(area);
+
+            (chunks[0], chunks[1], chunks[2])
+        };
+
+        self.render_header(frame, section_block);
+
+        if self.focused_section != Section::Summary {
+            let insert_mode = if self.insert_mode {
+                Line::from(vec![
+                    Span::from("Insert Mode "),
+                    Span::from("On").bold().yellow(),
+                ])
+            } else {
+                Line::from(vec![
+                    Span::from("Insert Mode "),
+                    Span::from("OFF").bold().yellow(),
+                ])
+            };
+
+            let insert_mode = Text::from(insert_mode).centered();
+
+            frame.render_widget(insert_mode, insert_mode_block);
+        }
+
+        match &self.focused_section {
+            Section::Distro(distro_section) => {
+                let (name_block, os_block, release_block, cloudinit_block) = {
+                    let chunks = Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([
+                            Constraint::Length(4),
+                            Constraint::Length(4),
+                            Constraint::Length(4),
+                            Constraint::Length(4),
+                        ])
+                        .margin(2)
+                        .split(area);
+
+                    (chunks[0], chunks[1], chunks[2], chunks[3])
+                };
+
+                let name = vec![
+                    Line::from(vec![
+                        {
+                            if distro_section == &DistroSection::Name {
+                                Span::from("> Name  ").bold()
+                            } else {
+                                Span::from("  Name  ")
+                            }
+                        },
+                        Span::from(" ".repeat(6)),
+                        Span::from({
+                            let original_length = self.name.field.to_string().len();
+                            let target_length = 50;
+
+                            self.name
+                                .field
+                                .to_string()
+                                .chars()
+                                .chain(std::iter::repeat_n(' ', target_length - original_length))
+                                .collect::<String>()
+                        })
+                        .on_dark_gray(),
+                    ]),
+                    Line::from(vec![
+                        Span::from(" ".repeat(14)),
+                        Span::from(self.name.clone().error.unwrap_or("".to_string())).red(),
+                    ]),
+                ];
+
+                let os = Line::from(vec![
+                    {
+                        if distro_section == &DistroSection::OS {
+                            Span::from("> OS    ").bold()
+                        } else {
+                            Span::from("  OS    ")
+                        }
+                    },
+                    Span::from(" ".repeat(6)),
+                    Span::from(format!("< {} >", self.distro)),
+                ]);
+
+                let release = Line::from(vec![
+                    {
+                        if distro_section == &DistroSection::Release {
+                            Span::from("> Release").bold()
+                        } else {
+                            Span::from("  Release")
+                        }
+                    },
+                    Span::from(" ".repeat(6)),
+                    Span::from({
+                        match self.distro {
+                            LinuxDistro::Ubuntu(_) => format!(
+                                "< {} - {} >",
+                                self.ubuntu_release,
+                                self.ubuntu_release.get_number()
+                            ),
+                            LinuxDistro::Debian(_) => {
+                                format!(
+                                    "< {} - {} >",
+                                    self.debian_release, self.debian_release as u8,
+                                )
+                            }
+                            LinuxDistro::ArchLinux => "-".to_string(),
+                        }
+                    }),
+                ]);
+
+                let cloudinit = vec![
+                    Line::from(vec![
+                        {
+                            if distro_section == &DistroSection::Cloudinit {
+                                Span::from("> Cloudinit ").bold()
+                            } else {
+                                Span::from("  Cloudinit ")
+                            }
+                        },
+                        Span::from(" ".repeat(2)),
+                        Span::from({
+                            let original_length: u32 =
+                                self.cloudinit.field.to_string().len() as u32;
+                            let target_length = 50_u32;
+
+                            self.cloudinit
+                                .field
+                                .to_string()
+                                .chars()
+                                .chain(std::iter::repeat_n(
+                                    ' ',
+                                    target_length
+                                        .saturating_sub(original_length)
+                                        .try_into()
+                                        .unwrap(),
+                                ))
+                                .collect::<String>()
+                        })
+                        .on_dark_gray(),
+                    ]),
+                    Line::from(vec![
+                        {
+                            if distro_section == &DistroSection::Cloudinit {
+                                Span::from("  File Path").bold()
+                            } else {
+                                Span::from("  File Path")
+                            }
+                        },
+                        Span::from(" ".repeat(3)),
+                        Span::from(self.cloudinit.clone().error.unwrap_or("".to_string())).red(),
+                    ]),
+                ];
+
+                frame.render_widget(Text::from(name), name_block);
+                frame.render_widget(os, os_block);
+                frame.render_widget(release, release_block);
+                frame.render_widget(Text::from(cloudinit), cloudinit_block);
+            }
+            Section::Hardware(hardware_section) => {
+                let (cpu_block, memory_block, arch_block, uefi_block) = {
+                    let chunks = Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([
+                            Constraint::Length(4),
+                            Constraint::Length(4),
+                            Constraint::Length(4),
+                            Constraint::Length(4),
+                        ])
+                        .margin(2)
+                        .split(area);
+
+                    (chunks[0], chunks[1], chunks[2], chunks[3])
+                };
+                let cpu = vec![
+                    Line::from(vec![
+                        {
+                            if hardware_section == &HardwareSection::Cpu {
+                                Span::from("> CPU   ").bold()
+                            } else {
+                                Span::from("  CPU   ")
+                            }
+                        },
+                        Span::from(" ".repeat(6)),
+                        Span::from({
+                            let original_length = self.vcpus.field.to_string().len();
+                            let target_length = 50;
+
+                            self.vcpus
+                                .field
+                                .to_string()
+                                .chars()
+                                .chain(std::iter::repeat_n(' ', target_length - original_length))
+                                .collect::<String>()
+                        })
+                        .on_dark_gray(),
+                    ]),
+                    Line::from(vec![
+                        Span::from(" ".repeat(14)),
+                        Span::from(self.vcpus.clone().error.unwrap_or("".to_string())).red(),
+                    ]),
+                ];
+
+                let memory = vec![
+                    Line::from(vec![
+                        {
+                            if hardware_section == &HardwareSection::Memory {
+                                Span::from("> Memory").bold()
+                            } else {
+                                Span::from("  Memory")
+                            }
+                        },
+                        Span::from(" ".repeat(6)),
+                        Span::from({
+                            let original_length = self.memory.field.to_string().len();
+                            let target_length = 47;
+
+                            self.memory
+                                .field
+                                .to_string()
+                                .chars()
+                                .chain(std::iter::repeat_n(' ', target_length - original_length))
+                                .collect::<String>()
+                        })
+                        .on_dark_gray(),
+                        Span::from(" MB"),
+                    ]),
+                    Line::from(vec![
+                        Span::from(" ".repeat(14)),
+                        Span::from(self.memory.clone().error.unwrap_or("".to_string())).red(),
+                    ]),
+                ];
+                let arch = Line::from(vec![
+                    {
+                        if hardware_section == &HardwareSection::Arch {
+                            Span::from("> Arch  ").bold()
+                        } else {
+                            Span::from("  Arch  ")
+                        }
+                    },
+                    Span::from(" ".repeat(6)),
+                    Span::from(format!("< {} >", self.arch).to_lowercase()),
+                ]);
+
+                let uefi = Line::from(vec![
+                    {
+                        if hardware_section == &HardwareSection::Uefi {
+                            Span::from("> Uefi  ").bold()
+                        } else {
+                            Span::from("  Uefi  ")
+                        }
+                    },
+                    Span::from(" ".repeat(6)),
+                    Span::from({
+                        if self.arch == Arch::X86_64 {
+                            if self.enable_uefi {
+                                "[x] UEFI        [ ] BIOS"
+                            } else {
+                                "[ ] UEFI        [x] BIOS"
+                            }
+                        } else {
+                            "[x] UEFI"
+                        }
+                    }),
+                ]);
+
+                frame.render_widget(Text::from(cpu), cpu_block);
+                frame.render_widget(Text::from(memory), memory_block);
+                frame.render_widget(Text::from(arch), arch_block);
+                frame.render_widget(Text::from(uefi), uefi_block);
+            }
+
+            Section::Disk => {}
+            Section::Network => {
+                let network = Text::from("Only User Network backend is supported for this version")
+                    .centered();
+                frame.render_widget(
+                    network,
+                    area.inner(Margin {
+                        horizontal: 0,
+                        vertical: 3,
+                    }),
+                );
+            }
+            Section::Summary => {
+                let (summary_block, create_block) = {
+                    let chunks = Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([Constraint::Fill(1), Constraint::Length(3)])
+                        .margin(4)
+                        .split(area);
+
+                    (chunks[0], chunks[1])
+                };
+                let items = [
+                    Line::from(vec![
+                        Span::from("Name          ").bold(),
+                        Span::from(" ".repeat(6)),
+                        Span::from(self.name.field.value()),
+                    ]),
+                    Line::from(vec![
+                        Span::from("Distro        ").bold(),
+                        Span::from(" ".repeat(6)),
+                        Span::from(self.distro.to_string()),
+                    ]),
+                    Line::from(vec![
+                        Span::from("Arch          ").bold(),
+                        Span::from(" ".repeat(6)),
+                        Span::from(self.arch.to_string()),
+                    ]),
+                    Line::from(vec![
+                        Span::from("vCPU          ").bold(),
+                        Span::from(" ".repeat(6)),
+                        Span::from(self.vcpus.field.value()),
+                    ]),
+                    Line::from(vec![
+                        Span::from("Memory        ").bold(),
+                        Span::from(" ".repeat(6)),
+                        Span::from(format!("{} MB", self.memory.field.value())),
+                    ]),
+                    Line::from(vec![
+                        Span::from("Firmware      ").bold(),
+                        Span::from(" ".repeat(6)),
+                        Span::from(if self.enable_uefi { "UEFI" } else { "BIOS" }),
+                    ]),
+                    Line::from(vec![
+                        Span::from("Network       ").bold(),
+                        Span::from(" ".repeat(6)),
+                        Span::from(self.network.to_string()),
+                    ]),
+                    Line::from(vec![
+                        Span::from("Cloudinit Path").bold(),
+                        Span::from(" ".repeat(6)),
+                        Span::from(if self.cloudinit.field.value().is_empty() {
+                            "Not Specified"
+                        } else {
+                            self.cloudinit.field.value()
+                        }),
+                    ]),
+                ];
+
+                let list = List::new(items);
+                let create = Text::from(vec![Line::from(""), Line::from("CREATE"), Line::from("")])
+                    .centered()
+                    .black()
+                    .on_yellow()
+                    .bold();
+
+                frame.render_widget(list, summary_block);
+
+                let create_block = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([
+                        Constraint::Fill(1),
+                        Constraint::Length(20),
+                        Constraint::Fill(1),
+                    ])
+                    .flex(ratatui::layout::Flex::SpaceBetween)
+                    .split(create_block)[1];
+
+                frame.render_widget(create, create_block);
+            }
+        }
+
+        if let Some(confirmation) = &self.confirmation {
+            confirmation.render(frame);
+        }
+    }
+}
