@@ -1,5 +1,4 @@
 pub mod debian;
-pub mod fedora;
 pub mod ubuntu;
 
 use debian::DebianRelease;

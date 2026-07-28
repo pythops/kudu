@@ -5,10 +5,7 @@ use std::{
     sync::{Arc, atomic::AtomicBool, mpsc::Sender},
 };
 
-use crossterm::event::{
-    KeyCode::{self, Char},
-    KeyEvent,
-};
+use crossterm::event::{KeyCode, KeyEvent};
 
 use qapi::qmp::RunState;
 use ratatui::{
@@ -76,7 +73,6 @@ pub struct VMBuilder {
     pub distro: LinuxDistro,
     vcpus: UserInputField,
     memory: UserInputField,
-    pub insert_mode: bool,
     pub network: Network,
     pub confirmation: Option<Confirmation>,
     enable_uefi: bool,
@@ -112,7 +108,6 @@ impl VMBuilder {
                 field: Input::default(),
                 error: None,
             },
-            insert_mode: false,
             network: Network::default(),
             confirmation: None,
             enable_uefi: true,
@@ -222,7 +217,7 @@ impl VMBuilder {
             return Ok(());
         }
 
-        if !self.insert_mode && key_event.code == KeyCode::Char('q') {
+        if key_event.code == KeyCode::Esc {
             self.confirmation = Some(Confirmation::default());
             return Ok(());
         }
@@ -263,260 +258,200 @@ impl VMBuilder {
                 Section::Summary => self.focused_section = Section::Network,
             },
             _ => match &self.focused_section {
-                Section::Distro(distro_section) => {
-                    if key_event.code == KeyCode::Esc {
-                        self.insert_mode = false;
-                        return Ok(());
-                    }
-
-                    if !self.insert_mode && key_event.code == Char('i') {
-                        self.insert_mode = true;
-                        return Ok(());
-                    }
-                    match distro_section {
-                        DistroSection::Name => {
-                            if self.insert_mode {
-                                self.name
-                                    .field
-                                    .handle_event(&crossterm::event::Event::Key(key_event));
-                            } else {
-                                match key_event.code {
-                                    KeyCode::Up | KeyCode::Char('k')
-                                        if self.validate_distro_section() =>
-                                    {
-                                        self.focused_section =
-                                            Section::Distro(DistroSection::Cloudinit);
-                                    }
-                                    KeyCode::Down | KeyCode::Char('j')
-                                        if self.validate_distro_section() =>
-                                    {
-                                        self.focused_section = Section::Distro(DistroSection::OS);
-                                    }
-                                    _ => {}
-                                }
-                            }
+                Section::Distro(distro_section) => match distro_section {
+                    DistroSection::Name => match key_event.code {
+                        KeyCode::Up if self.validate_distro_section() => {
+                            self.focused_section = Section::Distro(DistroSection::Cloudinit);
                         }
-                        DistroSection::OS => match key_event.code {
-                            KeyCode::Up | KeyCode::Char('k') => {
-                                self.focused_section = Section::Distro(DistroSection::Name);
-                            }
-                            KeyCode::Down | KeyCode::Char('j') => {
-                                self.focused_section = Section::Distro(DistroSection::Release);
-                            }
-                            KeyCode::Left | KeyCode::Char('h') => match self.distro {
-                                LinuxDistro::Debian(_) => {
-                                    self.distro = LinuxDistro::Ubuntu(UbuntuRelease::default());
-                                }
-                                LinuxDistro::Ubuntu(_) => {
-                                    self.distro = LinuxDistro::ArchLinux;
-                                }
-                                LinuxDistro::ArchLinux => {
-                                    self.distro = LinuxDistro::Debian(DebianRelease::default());
-                                }
-                            },
-                            KeyCode::Right | KeyCode::Char('l') => match self.distro {
-                                LinuxDistro::Debian(_) => {
-                                    self.distro = LinuxDistro::ArchLinux;
-                                }
-                                LinuxDistro::Ubuntu(_) => {
-                                    self.distro = LinuxDistro::Debian(DebianRelease::default());
-                                }
-                                LinuxDistro::ArchLinux => {
-                                    self.distro = LinuxDistro::Ubuntu(UbuntuRelease::default());
-                                }
-                            },
-                            _ => {}
-                        },
-                        DistroSection::Release => match key_event.code {
-                            KeyCode::Up | KeyCode::Char('k') => {
-                                self.focused_section = Section::Distro(DistroSection::OS);
-                            }
-                            KeyCode::Down | KeyCode::Char('j') => {
-                                self.focused_section = Section::Distro(DistroSection::Cloudinit);
-                            }
-                            KeyCode::Right | KeyCode::Char('l') => match self.distro {
-                                LinuxDistro::ArchLinux => {}
-                                LinuxDistro::Debian(_) => match self.debian_release {
-                                    DebianRelease::Trixie => {
-                                        self.debian_release = DebianRelease::Bookworm;
-                                    }
-                                    DebianRelease::Bookworm => {
-                                        self.debian_release = DebianRelease::Forky;
-                                    }
-                                    DebianRelease::Forky => {
-                                        self.debian_release = DebianRelease::Trixie;
-                                    }
-                                },
-                                LinuxDistro::Ubuntu(_) => match self.ubuntu_release {
-                                    UbuntuRelease::Resolute => {
-                                        self.ubuntu_release = UbuntuRelease::Noble;
-                                    }
-                                    UbuntuRelease::Noble => {
-                                        self.ubuntu_release = UbuntuRelease::Jammy;
-                                    }
-                                    UbuntuRelease::Jammy => {
-                                        self.ubuntu_release = UbuntuRelease::Resolute;
-                                    }
-                                },
-                            },
-                            KeyCode::Left | KeyCode::Char('h') => match self.distro {
-                                LinuxDistro::ArchLinux => {}
-                                LinuxDistro::Debian(_) => match self.debian_release {
-                                    DebianRelease::Trixie => {
-                                        self.debian_release = DebianRelease::Forky;
-                                    }
-                                    DebianRelease::Bookworm => {
-                                        self.debian_release = DebianRelease::Trixie;
-                                    }
-                                    DebianRelease::Forky => {
-                                        self.debian_release = DebianRelease::Bookworm;
-                                    }
-                                },
-                                LinuxDistro::Ubuntu(_) => match self.ubuntu_release {
-                                    UbuntuRelease::Resolute => {
-                                        self.ubuntu_release = UbuntuRelease::Jammy;
-                                    }
-                                    UbuntuRelease::Noble => {
-                                        self.ubuntu_release = UbuntuRelease::Resolute;
-                                    }
-                                    UbuntuRelease::Jammy => {
-                                        self.ubuntu_release = UbuntuRelease::Noble;
-                                    }
-                                },
-                            },
-                            _ => {}
-                        },
-                        DistroSection::Cloudinit => {
-                            if self.insert_mode {
-                                self.cloudinit
-                                    .field
-                                    .handle_event(&crossterm::event::Event::Key(key_event));
-                            } else {
-                                match key_event.code {
-                                    KeyCode::Up | KeyCode::Char('k')
-                                        if self.validate_distro_section() =>
-                                    {
-                                        self.focused_section =
-                                            Section::Distro(DistroSection::Release);
-                                    }
-                                    KeyCode::Down | KeyCode::Char('j')
-                                        if self.validate_distro_section() =>
-                                    {
-                                        self.focused_section = Section::Distro(DistroSection::Name);
-                                    }
-                                    _ => {}
-                                }
-                            }
+                        KeyCode::Down if self.validate_distro_section() => {
+                            self.focused_section = Section::Distro(DistroSection::OS);
                         }
-                    }
-                }
-                Section::Hardware(hardware_section) => {
-                    if key_event.code == KeyCode::Esc {
-                        self.insert_mode = false;
-                        return Ok(());
-                    }
-
-                    if !self.insert_mode && key_event.code == Char('i') {
-                        self.insert_mode = true;
-                        return Ok(());
-                    }
-                    match hardware_section {
-                        HardwareSection::Cpu => {
-                            if self.insert_mode {
-                                self.vcpus
-                                    .field
-                                    .handle_event(&crossterm::event::Event::Key(key_event));
-                            } else {
-                                match key_event.code {
-                                    KeyCode::Up | KeyCode::Char('k')
-                                        if self.validate_harware_section() =>
-                                    {
-                                        self.focused_section =
-                                            Section::Hardware(HardwareSection::Uefi);
-                                    }
-                                    KeyCode::Down | KeyCode::Char('j')
-                                        if self.validate_harware_section() =>
-                                    {
-                                        self.focused_section =
-                                            Section::Hardware(HardwareSection::Memory);
-                                    }
-                                    _ => {}
-                                }
-                            }
+                        _ => {
+                            self.name
+                                .field
+                                .handle_event(&crossterm::event::Event::Key(key_event));
                         }
-                        HardwareSection::Memory => {
-                            if self.insert_mode {
-                                self.memory
-                                    .field
-                                    .handle_event(&crossterm::event::Event::Key(key_event));
-                            } else {
-                                match key_event.code {
-                                    KeyCode::Up | KeyCode::Char('k')
-                                        if self.validate_harware_section() =>
-                                    {
-                                        self.focused_section =
-                                            Section::Hardware(HardwareSection::Cpu);
-                                    }
-                                    KeyCode::Down | KeyCode::Char('j')
-                                        if self.validate_harware_section() =>
-                                    {
-                                        self.focused_section =
-                                            Section::Hardware(HardwareSection::Arch);
-                                    }
-                                    _ => {}
-                                }
-                            }
+                    },
+                    DistroSection::OS => match key_event.code {
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            self.focused_section = Section::Distro(DistroSection::Name);
                         }
-                        HardwareSection::Arch => match key_event.code {
-                            KeyCode::Right | KeyCode::Char('l') => match self.arch {
-                                Arch::X86_64 => {
-                                    self.arch = Arch::Riscv64;
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            self.focused_section = Section::Distro(DistroSection::Release);
+                        }
+                        KeyCode::Left | KeyCode::Char('h') => match self.distro {
+                            LinuxDistro::Debian(_) => {
+                                self.distro = LinuxDistro::Ubuntu(UbuntuRelease::default());
+                            }
+                            LinuxDistro::Ubuntu(_) => {
+                                self.distro = LinuxDistro::ArchLinux;
+                            }
+                            LinuxDistro::ArchLinux => {
+                                self.distro = LinuxDistro::Debian(DebianRelease::default());
+                            }
+                        },
+                        KeyCode::Right | KeyCode::Char('l') => match self.distro {
+                            LinuxDistro::Debian(_) => {
+                                self.distro = LinuxDistro::ArchLinux;
+                            }
+                            LinuxDistro::Ubuntu(_) => {
+                                self.distro = LinuxDistro::Debian(DebianRelease::default());
+                            }
+                            LinuxDistro::ArchLinux => {
+                                self.distro = LinuxDistro::Ubuntu(UbuntuRelease::default());
+                            }
+                        },
+                        _ => {}
+                    },
+                    DistroSection::Release => match key_event.code {
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            self.focused_section = Section::Distro(DistroSection::OS);
+                        }
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            self.focused_section = Section::Distro(DistroSection::Cloudinit);
+                        }
+                        KeyCode::Right | KeyCode::Char('l') => match self.distro {
+                            LinuxDistro::ArchLinux => {}
+                            LinuxDistro::Debian(_) => match self.debian_release {
+                                DebianRelease::Trixie => {
+                                    self.debian_release = DebianRelease::Bookworm;
                                 }
-                                Arch::Aarch64 => {
-                                    self.arch = Arch::X86_64;
+                                DebianRelease::Bookworm => {
+                                    self.debian_release = DebianRelease::Forky;
                                 }
-                                Arch::Riscv64 => {
-                                    self.arch = Arch::Aarch64;
+                                DebianRelease::Forky => {
+                                    self.debian_release = DebianRelease::Trixie;
                                 }
                             },
-                            KeyCode::Left | KeyCode::Char('h') => match self.arch {
-                                Arch::X86_64 => {
-                                    self.arch = Arch::Aarch64;
+                            LinuxDistro::Ubuntu(_) => match self.ubuntu_release {
+                                UbuntuRelease::Resolute => {
+                                    self.ubuntu_release = UbuntuRelease::Noble;
                                 }
-                                Arch::Aarch64 => {
-                                    self.arch = Arch::Riscv64;
+                                UbuntuRelease::Noble => {
+                                    self.ubuntu_release = UbuntuRelease::Jammy;
                                 }
-                                Arch::Riscv64 => {
-                                    self.arch = Arch::X86_64;
+                                UbuntuRelease::Jammy => {
+                                    self.ubuntu_release = UbuntuRelease::Resolute;
                                 }
                             },
-                            KeyCode::Up | KeyCode::Char('k') => {
-                                self.focused_section = Section::Hardware(HardwareSection::Memory);
-                            }
-                            KeyCode::Down | KeyCode::Char('j') => {
-                                self.focused_section = Section::Hardware(HardwareSection::Uefi);
-                            }
-                            _ => {}
                         },
-                        HardwareSection::Uefi => match key_event.code {
-                            KeyCode::Right
-                            | KeyCode::Char('l')
-                            | KeyCode::Left
-                            | KeyCode::Char('h')
-                                if self.arch == Arch::X86_64 =>
-                            {
-                                self.enable_uefi = !self.enable_uefi;
-                            }
-                            KeyCode::Up | KeyCode::Char('k') => {
-                                self.focused_section = Section::Hardware(HardwareSection::Arch);
-                            }
-                            KeyCode::Down | KeyCode::Char('j') => {
-                                self.focused_section = Section::Hardware(HardwareSection::Cpu);
-                            }
-                            _ => {}
+                        KeyCode::Left | KeyCode::Char('h') => match self.distro {
+                            LinuxDistro::ArchLinux => {}
+                            LinuxDistro::Debian(_) => match self.debian_release {
+                                DebianRelease::Trixie => {
+                                    self.debian_release = DebianRelease::Forky;
+                                }
+                                DebianRelease::Bookworm => {
+                                    self.debian_release = DebianRelease::Trixie;
+                                }
+                                DebianRelease::Forky => {
+                                    self.debian_release = DebianRelease::Bookworm;
+                                }
+                            },
+                            LinuxDistro::Ubuntu(_) => match self.ubuntu_release {
+                                UbuntuRelease::Resolute => {
+                                    self.ubuntu_release = UbuntuRelease::Jammy;
+                                }
+                                UbuntuRelease::Noble => {
+                                    self.ubuntu_release = UbuntuRelease::Resolute;
+                                }
+                                UbuntuRelease::Jammy => {
+                                    self.ubuntu_release = UbuntuRelease::Noble;
+                                }
+                            },
                         },
-                    }
-                }
+                        _ => {}
+                    },
+                    DistroSection::Cloudinit => match key_event.code {
+                        KeyCode::Up if self.validate_distro_section() => {
+                            self.focused_section = Section::Distro(DistroSection::Release);
+                        }
+                        KeyCode::Down if self.validate_distro_section() => {
+                            self.focused_section = Section::Distro(DistroSection::Name);
+                        }
+                        _ => {
+                            self.cloudinit
+                                .field
+                                .handle_event(&crossterm::event::Event::Key(key_event));
+                        }
+                    },
+                },
+                Section::Hardware(hardware_section) => match hardware_section {
+                    HardwareSection::Cpu => match key_event.code {
+                        KeyCode::Up if self.validate_harware_section() => {
+                            self.focused_section = Section::Hardware(HardwareSection::Uefi);
+                        }
+                        KeyCode::Down if self.validate_harware_section() => {
+                            self.focused_section = Section::Hardware(HardwareSection::Memory);
+                        }
+                        _ => {
+                            self.vcpus
+                                .field
+                                .handle_event(&crossterm::event::Event::Key(key_event));
+                        }
+                    },
+                    HardwareSection::Memory => match key_event.code {
+                        KeyCode::Up if self.validate_harware_section() => {
+                            self.focused_section = Section::Hardware(HardwareSection::Cpu);
+                        }
+                        KeyCode::Down if self.validate_harware_section() => {
+                            self.focused_section = Section::Hardware(HardwareSection::Arch);
+                        }
+                        _ => {
+                            self.memory
+                                .field
+                                .handle_event(&crossterm::event::Event::Key(key_event));
+                        }
+                    },
+                    HardwareSection::Arch => match key_event.code {
+                        KeyCode::Right | KeyCode::Char('l') => match self.arch {
+                            Arch::X86_64 => {
+                                self.arch = Arch::Riscv64;
+                            }
+                            Arch::Aarch64 => {
+                                self.arch = Arch::X86_64;
+                            }
+                            Arch::Riscv64 => {
+                                self.arch = Arch::Aarch64;
+                            }
+                        },
+                        KeyCode::Left | KeyCode::Char('h') => match self.arch {
+                            Arch::X86_64 => {
+                                self.arch = Arch::Aarch64;
+                            }
+                            Arch::Aarch64 => {
+                                self.arch = Arch::Riscv64;
+                            }
+                            Arch::Riscv64 => {
+                                self.arch = Arch::X86_64;
+                            }
+                        },
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            self.focused_section = Section::Hardware(HardwareSection::Memory);
+                        }
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            self.focused_section = Section::Hardware(HardwareSection::Uefi);
+                        }
+                        _ => {}
+                    },
+                    HardwareSection::Uefi => match key_event.code {
+                        KeyCode::Right
+                        | KeyCode::Char('l')
+                        | KeyCode::Left
+                        | KeyCode::Char('h')
+                            if self.arch == Arch::X86_64 =>
+                        {
+                            self.enable_uefi = !self.enable_uefi;
+                        }
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            self.focused_section = Section::Hardware(HardwareSection::Arch);
+                        }
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            self.focused_section = Section::Hardware(HardwareSection::Cpu);
+                        }
+                        _ => {}
+                    },
+                },
                 Section::Summary if key_event.code == KeyCode::Enter => {
                     let vm = self.build();
                     sender.send(Event::VMCreated(vm))?;
@@ -643,39 +578,17 @@ impl VMBuilder {
             vertical: 2,
         });
 
-        let (section_block, area, insert_mode_block) = {
+        let (section_block, area) = {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(1),
-                    Constraint::Fill(1),
-                    Constraint::Length(1),
-                ])
+                .constraints([Constraint::Length(1), Constraint::Fill(1)])
                 .flex(ratatui::layout::Flex::SpaceBetween)
                 .split(area);
 
-            (chunks[0], chunks[1], chunks[2])
+            (chunks[0], chunks[1])
         };
 
         self.render_header(frame, section_block);
-
-        if self.focused_section != Section::Summary {
-            let insert_mode = if self.insert_mode {
-                Line::from(vec![
-                    Span::from("Insert Mode "),
-                    Span::from("On").bold().yellow(),
-                ])
-            } else {
-                Line::from(vec![
-                    Span::from("Insert Mode "),
-                    Span::from("OFF").bold().yellow(),
-                ])
-            };
-
-            let insert_mode = Text::from(insert_mode).centered();
-
-            frame.render_widget(insert_mode, insert_mode_block);
-        }
 
         match &self.focused_section {
             Section::Distro(distro_section) => {
@@ -809,6 +722,23 @@ impl VMBuilder {
                 frame.render_widget(os, os_block);
                 frame.render_widget(release, release_block);
                 frame.render_widget(Text::from(cloudinit), cloudinit_block);
+
+                // FIX: cursor shows on the confirmation popup
+                if self.confirmation.is_none() {
+                    match distro_section {
+                        DistroSection::Name => {
+                            let x = area.x + self.name.field.visual_cursor() as u16 + 16;
+                            let y = area.y + 2;
+                            frame.set_cursor_position((x, y));
+                        }
+                        DistroSection::Cloudinit => {
+                            let x = area.x + self.cloudinit.field.visual_cursor() as u16 + 16;
+                            let y = area.y + 14;
+                            frame.set_cursor_position((x, y));
+                        }
+                        _ => {}
+                    }
+                }
             }
             Section::Hardware(hardware_section) => {
                 let (cpu_block, memory_block, arch_block, uefi_block) = {
@@ -921,6 +851,22 @@ impl VMBuilder {
                 frame.render_widget(Text::from(memory), memory_block);
                 frame.render_widget(Text::from(arch), arch_block);
                 frame.render_widget(Text::from(uefi), uefi_block);
+                // FIX: cursor shows on the confirmation popup
+                if self.confirmation.is_none() {
+                    match hardware_section {
+                        HardwareSection::Cpu => {
+                            let x = area.x + self.vcpus.field.visual_cursor() as u16 + 16;
+                            let y = area.y + 2;
+                            frame.set_cursor_position((x, y));
+                        }
+                        HardwareSection::Memory => {
+                            let x = area.x + self.memory.field.visual_cursor() as u16 + 16;
+                            let y = area.y + 6;
+                            frame.set_cursor_position((x, y));
+                        }
+                        _ => {}
+                    }
+                }
             }
 
             Section::Disk => {}

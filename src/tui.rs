@@ -2,9 +2,9 @@ use crate::app::App;
 use crate::event::EventHandler;
 use crate::ui;
 use anyhow::Result;
+use crossterm::cursor::SetCursorStyle;
 use ratatui::Terminal;
 use ratatui::backend::Backend;
-use ratatui::crossterm::event::{DisableMouseCapture, EnableMouseCapture};
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use std::{io, panic};
 
@@ -25,7 +25,11 @@ impl<B: Backend> Tui<B> {
         <B as Backend>::Error: 'static,
     {
         terminal::enable_raw_mode()?;
-        ratatui::crossterm::execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture)?;
+        ratatui::crossterm::execute!(
+            io::stdout(),
+            EnterAlternateScreen,
+            SetCursorStyle::BlinkingBar
+        )?;
 
         let panic_hook = panic::take_hook();
         panic::set_hook(Box::new(move |panic| {
@@ -49,7 +53,11 @@ impl<B: Backend> Tui<B> {
 
     fn reset() -> Result<()> {
         terminal::disable_raw_mode()?;
-        ratatui::crossterm::execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
+        ratatui::crossterm::execute!(
+            io::stdout(),
+            LeaveAlternateScreen,
+            SetCursorStyle::DefaultUserShape
+        )?;
         Ok(())
     }
 
