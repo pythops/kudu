@@ -25,6 +25,7 @@ use crate::{
 #[derive(Debug, Clone, Copy, strum_macros::Display, Deserialize, Serialize)]
 #[non_exhaustive]
 pub enum LinuxDistro {
+    #[strum(to_string = "Arch Linux (btw)")]
     ArchLinux,
     Debian(DebianRelease),
     Ubuntu(UbuntuRelease),

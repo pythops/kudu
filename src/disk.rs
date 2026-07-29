@@ -190,7 +190,7 @@ impl DiskBuilder {
                         .collect::<String>()
                 })
                 .on_dark_gray(),
-                Span::from(" GB"),
+                Span::from(" GiB"),
             ]),
             Line::from(vec![
                 Span::from(" ".repeat(14)),

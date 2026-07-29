@@ -97,7 +97,7 @@ impl VMBuilder {
     pub fn new() -> VMBuilder {
         Self {
             focused_section: Section::Distro(DistroSection::Name),
-            arch: Arch::default(),
+            arch: Arch::try_from(std::env::consts::ARCH).unwrap_or_default(),
             name: UserInputField {
                 field: Input::default(),
                 error: None,
@@ -954,7 +954,7 @@ impl VMBuilder {
                         Row::new(vec![
                             index.to_string(),
                             disk.format.to_string(),
-                            format!("{} GB", disk.size),
+                            format!("{} GiB", disk.size),
                         ])
                     });
 
@@ -1066,6 +1066,7 @@ impl VMBuilder {
                                 Line::from(vec![
                                     Span::from("Disks        ").bold(),
                                     Span::from(" ".repeat(6)),
+                                    Span::from(" - "),
                                 ]),
                                 Line::from(""),
                             ]
@@ -1074,7 +1075,7 @@ impl VMBuilder {
                                 Span::from("Disks        ").bold(),
                                 Span::from(" ".repeat(6)),
                                 Span::from(format!(
-                                    " Disk 0: size={}GB, format={}",
+                                    " Disk 0: size={}GiB, format={}",
                                     self.disks[0].size, self.disks[0].format
                                 )),
                             ]));
@@ -1082,7 +1083,7 @@ impl VMBuilder {
                                 lines.push(Line::from(vec![
                                     Span::from(" ".repeat(20)),
                                     Span::from(format!(
-                                        "Disk {}: size={}GB, format={}",
+                                        "Disk {}: size={}GiB, format={}",
                                         index + 1,
                                         disk.size,
                                         disk.format

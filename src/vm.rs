@@ -21,7 +21,7 @@ use ratatui::{
 };
 
 use crate::{
-    Arch,
+    Arch, KVM_ENABLED,
     disk::Disk,
     distro::LinuxDistro,
     event::{
@@ -347,7 +347,7 @@ impl VM {
             Block::new()
                 .borders(Borders::all())
                 .border_type(BorderType::Rounded)
-                .title(" Infos ")
+                .title(" Information ")
                 .title_alignment(ratatui::layout::HorizontalAlignment::Center)
                 .border_style(Style::default().yellow()),
             infos_block,
@@ -411,6 +411,7 @@ impl VM {
                         Line::from(vec![
                             Span::from("Disks  ").bold().fg(Color::Yellow),
                             Span::from(" ".repeat(4)),
+                            Span::from(" - "),
                         ]),
                         Line::from(""),
                     ]
@@ -419,7 +420,7 @@ impl VM {
                         Span::from("Disks  ").bold().fg(Color::Yellow),
                         Span::from(" ".repeat(4)),
                         Span::from(format!(
-                            " Disk 0: size={}GB, format={}",
+                            " Disk 0: size={}GiB, format={}",
                             self.disks[0].size, self.disks[0].format
                         )),
                     ]));
@@ -427,7 +428,7 @@ impl VM {
                         lines.push(Line::from(vec![
                             Span::from(" ".repeat(12)),
                             Span::from(format!(
-                                "Disk {}: size={}GB, format={}",
+                                "Disk {}: size={}GiB, format={}",
                                 index + 1,
                                 disk.size,
                                 disk.format
@@ -438,6 +439,23 @@ impl VM {
                     lines
                 }
             }),
+            ListItem::from(vec![
+                Line::from(vec![
+                    Span::from("KVM     ").bold().fg(Color::Yellow),
+                    Span::from(" ".repeat(4)),
+                    Span::from({
+                        if let Ok(host_arch) = Arch::try_from(std::env::consts::ARCH)
+                            && host_arch == self.arch
+                            && unsafe { KVM_ENABLED }
+                        {
+                            "Enabled"
+                        } else {
+                            "Disabled"
+                        }
+                    }),
+                ]),
+                Line::from(""),
+            ]),
             ListItem::from(vec![
                 Line::from(vec![
                     Span::from("Distro  ").bold().fg(Color::Yellow),
@@ -488,6 +506,15 @@ impl VM {
         } else {
             self.events.last_chunk::<8>().unwrap().to_vec()
         };
+
+        let events = events.iter().map(|event| {
+            let splits: Vec<&str> = event.split(" - ").collect();
+            Line::from(vec![
+                Span::from(splits[0]).green(),
+                Span::from(" - "),
+                Span::from(splits[1]).blue(),
+            ])
+        });
 
         let list = List::new(events);
         frame.render_stateful_widget(
