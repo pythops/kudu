@@ -409,7 +409,7 @@ impl App {
             );
         }
 
-        if let Some(vm_builder) = &self.new_vm {
+        if let Some(vm_builder) = &mut self.new_vm {
             vm_builder.render(frame);
         }
 

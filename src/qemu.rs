@@ -79,22 +79,33 @@ impl Qemu {
             }
         };
 
+        for disk in &vm.disks {
+            command.arg("-drive").arg(format!(
+                "file={},format={},if=virtio",
+                disk.path.to_string_lossy(),
+                disk.format.to_string().to_lowercase()
+            ));
+        }
+
         if let Some((uefi_code, uefi_vars)) = &vm.uefi {
             command
                 .arg("-drive")
                 .arg(format!(
-                    "if=pflash,format=raw,readonly=on,file={}",
+                    "if=pflash,format=raw,unit=0,readonly=on,file={}",
                     uefi_code.to_string_lossy()
                 ))
                 .arg("-drive")
                 .arg(format!(
-                    "if=pflash,format=raw,file={}",
+                    "if=pflash,format=raw,unit=1,file={}",
                     uefi_vars.to_string_lossy()
                 ));
         }
 
         if let Some(cloudinit) = &vm.cloudinit {
-            command.arg("-cdrom").arg(cloudinit);
+            command.arg("-drive").arg(format!(
+                "file={},format=raw,readonly=on,if=virtio",
+                cloudinit.to_string_lossy()
+            ));
         }
 
         if let Ok(host_arch) = Arch::try_from(std::env::consts::ARCH)
@@ -122,7 +133,13 @@ impl Qemu {
             .arg(vm.memory.to_string())
             .arg("-smp")
             .arg(vm.vcpus.to_string())
-            .arg(vm.get_boot_file());
+            .arg("-boot")
+            .arg("order=d")
+            .arg("-drive")
+            .arg(format!(
+                "file={},format=qcow2,if=virtio",
+                vm.get_boot_file().to_string_lossy()
+            ));
 
         command.stdout(Stdio::null());
         command.stderr(Stdio::piped());

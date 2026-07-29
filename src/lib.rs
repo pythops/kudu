@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub mod app;
 pub mod cloudinit;
 pub mod confirmation;
+pub mod disk;
 pub mod distro;
 pub mod event;
 pub mod handlers;

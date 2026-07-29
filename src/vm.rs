@@ -22,6 +22,7 @@ use ratatui::{
 
 use crate::{
     Arch,
+    disk::Disk,
     distro::LinuxDistro,
     event::{
         DownloadEvent,
@@ -43,6 +44,7 @@ pub struct VM {
     pub cloudinit: Option<PathBuf>,
     pub enable_uefi: bool,
     pub uefi: Option<(PathBuf, PathBuf)>,
+    pub disks: Vec<Disk>,
 
     #[serde(skip)]
     pub downloading: Arc<AtomicBool>,
@@ -125,6 +127,13 @@ impl VM {
             path.push("uefi_vars.fd");
             fs::copy(vars, &path)?;
             self.uefi = Some((code, path.clone()));
+            path.pop();
+        }
+
+        for (index, disk) in &mut self.disks.iter_mut().enumerate() {
+            path.push(format!("disk_{}", index));
+            fs::copy(&disk.path, &path)?;
+            disk.path = path.to_owned();
             path.pop();
         }
 
@@ -356,7 +365,6 @@ impl VM {
 
         let mut items = vec![
             ListItem::from(vec![
-                Line::from(""),
                 Line::from(vec![
                     Span::from("Name    ").bold().fg(Color::Yellow),
                     Span::from(" ".repeat(4)),
@@ -365,7 +373,6 @@ impl VM {
                 Line::from(""),
             ]),
             ListItem::from(vec![
-                Line::from(""),
                 Line::from(vec![
                     Span::from("State   ").bold().fg(Color::Yellow),
                     Span::from(" ".repeat(4)),
@@ -374,7 +381,6 @@ impl VM {
                 Line::from(""),
             ]),
             ListItem::from(vec![
-                Line::from(""),
                 Line::from(vec![
                     Span::from("vCPU    ").bold().fg(Color::Yellow),
                     Span::from(" ".repeat(4)),
@@ -383,7 +389,6 @@ impl VM {
                 Line::from(""),
             ]),
             ListItem::from(vec![
-                Line::from(""),
                 Line::from(vec![
                     Span::from("Memory  ").bold().fg(Color::Yellow),
                     Span::from(" ".repeat(4)),
@@ -392,7 +397,6 @@ impl VM {
                 Line::from(""),
             ]),
             ListItem::from(vec![
-                Line::from(""),
                 Line::from(vec![
                     Span::from("Firmware").bold().fg(Color::Yellow),
                     Span::from(" ".repeat(4)),
@@ -400,8 +404,41 @@ impl VM {
                 ]),
                 Line::from(""),
             ]),
+            ListItem::from({
+                let mut lines = Vec::new();
+                if self.disks.is_empty() {
+                    vec![
+                        Line::from(vec![
+                            Span::from("Disks  ").bold().fg(Color::Yellow),
+                            Span::from(" ".repeat(4)),
+                        ]),
+                        Line::from(""),
+                    ]
+                } else {
+                    lines.push(Line::from(vec![
+                        Span::from("Disks  ").bold().fg(Color::Yellow),
+                        Span::from(" ".repeat(4)),
+                        Span::from(format!(
+                            " Disk 0: size={}GB, format={}",
+                            self.disks[0].size, self.disks[0].format
+                        )),
+                    ]));
+                    for (index, disk) in self.disks.iter().skip(1).enumerate() {
+                        lines.push(Line::from(vec![
+                            Span::from(" ".repeat(12)),
+                            Span::from(format!(
+                                "Disk {}: size={}GB, format={}",
+                                index + 1,
+                                disk.size,
+                                disk.format
+                            )),
+                        ]))
+                    }
+                    lines.push(Line::from(""));
+                    lines
+                }
+            }),
             ListItem::from(vec![
-                Line::from(""),
                 Line::from(vec![
                     Span::from("Distro  ").bold().fg(Color::Yellow),
                     Span::from(" ".repeat(4)),
@@ -410,7 +447,6 @@ impl VM {
                 Line::from(""),
             ]),
             ListItem::from(vec![
-                Line::from(""),
                 Line::from(vec![
                     Span::from("Arch    ").bold().fg(Color::Yellow),
                     Span::from(" ".repeat(4)),
@@ -422,7 +458,6 @@ impl VM {
 
         if let Some(vnc_info) = self.vnc.clone() {
             items.push(ListItem::from(vec![
-                Line::from(""),
                 Line::from(vec![
                     Span::from("Vnc     ").bold().fg(Color::Yellow),
                     Span::from(" ".repeat(4)),
@@ -443,7 +478,7 @@ impl VM {
             list,
             infos_block.inner(Margin {
                 horizontal: 4,
-                vertical: 1,
+                vertical: 2,
             }),
         );
 

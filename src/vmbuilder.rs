@@ -13,7 +13,10 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span, Text},
-    widgets::{Block, BorderType, Borders, Clear, List, ListState, Padding},
+    widgets::{
+        Block, BorderType, Borders, Clear, List, ListItem, ListState, Padding, Row, Table,
+        TableState,
+    },
 };
 use tui_input::{Input, backend::crossterm::EventHandler};
 
@@ -21,6 +24,7 @@ use crate::{
     Arch,
     cloudinit::Cloudinit,
     confirmation::Confirmation,
+    disk::{Disk, DiskBuilder},
     distro::{
         LinuxDistro::{self, ArchLinux},
         debian::DebianRelease,
@@ -78,6 +82,9 @@ pub struct VMBuilder {
     enable_uefi: bool,
     ubuntu_release: UbuntuRelease,
     debian_release: DebianRelease,
+    pub disks: Vec<Disk>,
+    distk_state: TableState,
+    new_disk: Option<DiskBuilder>,
 }
 
 impl Default for VMBuilder {
@@ -113,6 +120,9 @@ impl VMBuilder {
             enable_uefi: true,
             ubuntu_release: UbuntuRelease::default(),
             debian_release: DebianRelease::default(),
+            disks: Vec::new(),
+            distk_state: TableState::default(),
+            new_disk: None,
         }
     }
 
@@ -138,6 +148,7 @@ impl VMBuilder {
             enable_uefi: self.enable_uefi,
             uefi: None,
             downloading: Arc::new(AtomicBool::new(false)),
+            disks: self.disks.clone(),
         }
     }
 
@@ -214,6 +225,31 @@ impl VMBuilder {
 
         if let Some(confirmation) = &mut self.confirmation {
             confirmation.handle_key_events(key_event, sender)?;
+            return Ok(());
+        }
+
+        if let Some(new_disk) = &mut self.new_disk {
+            match key_event.code {
+                KeyCode::Esc => {
+                    self.new_disk = None;
+                }
+                KeyCode::Enter => {
+                    if new_disk.validate() {
+                        let disk = new_disk.build()?;
+                        self.disks.push(disk);
+                        self.new_disk = None;
+
+                        if self.distk_state.selected().is_none() {
+                            self.distk_state.select(Some(0));
+                        }
+                    }
+                }
+
+                _ => {
+                    new_disk.handle_key_events(key_event);
+                }
+            }
+
             return Ok(());
         }
 
@@ -452,6 +488,35 @@ impl VMBuilder {
                         _ => {}
                     },
                 },
+                Section::Disk => match key_event.code {
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        if let Some(index) = self.distk_state.selected() {
+                            self.distk_state
+                                .select(Some(index.saturating_add(1).min(self.disks.len() - 1)));
+                        }
+                    }
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        if let Some(index) = self.distk_state.selected() {
+                            self.distk_state.select(Some(index.saturating_sub(1)));
+                        }
+                    }
+                    KeyCode::Char('d') => {
+                        if let Some(index) = self.distk_state.selected() {
+                            self.disks.remove(index);
+
+                            if !self.disks.is_empty() {
+                                self.distk_state.select(Some(index.saturating_sub(1)));
+                            } else {
+                                self.distk_state.select(None);
+                            }
+                        }
+                    }
+                    KeyCode::Char('n') => {
+                        self.new_disk = Some(DiskBuilder::default());
+                    }
+                    _ => {}
+                },
+                Section::Network => {}
                 Section::Summary if key_event.code == KeyCode::Enter => {
                     let vm = self.build();
                     sender.send(Event::VMCreated(vm))?;
@@ -536,7 +601,7 @@ impl VMBuilder {
         );
     }
 
-    pub fn render(&self, frame: &mut Frame) {
+    pub fn render(&mut self, frame: &mut Frame) {
         let area = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -564,7 +629,7 @@ impl VMBuilder {
                 .title(" New VM 󰏖  ")
                 .title_alignment(ratatui::layout::HorizontalAlignment::Center)
                 .borders(Borders::all())
-                .border_type(if self.confirmation.is_some() {
+                .border_type(if self.confirmation.is_some() | self.new_disk.is_some() {
                     BorderType::default()
                 } else {
                     BorderType::Thick
@@ -869,7 +934,53 @@ impl VMBuilder {
                 }
             }
 
-            Section::Disk => {}
+            Section::Disk => {
+                if self.disks.is_empty() {
+                    let message = Text::from("Press n to add additional disks").centered();
+                    frame.render_widget(
+                        message,
+                        area.inner(Margin {
+                            horizontal: 0,
+                            vertical: 3,
+                        }),
+                    );
+                } else {
+                    let widths = [
+                        Constraint::Length(5),
+                        Constraint::Length(15),
+                        Constraint::Length(15),
+                    ];
+                    let disks = self.disks.iter().enumerate().map(|(index, disk)| {
+                        Row::new(vec![
+                            index.to_string(),
+                            disk.format.to_string(),
+                            format!("{} GB", disk.size),
+                        ])
+                    });
+
+                    let disks = Table::new(disks, widths)
+                        .header(
+                            Row::new(vec!["", "Format", "Size"])
+                                .style(Style::new().bold())
+                                .bottom_margin(1),
+                        )
+                        .flex(ratatui::layout::Flex::SpaceBetween)
+                        .row_highlight_style(Style::new().on_dark_gray())
+                        .column_spacing(1);
+
+                    frame.render_stateful_widget(
+                        disks,
+                        area.inner(Margin {
+                            horizontal: 2,
+                            vertical: 2,
+                        }),
+                        &mut self.distk_state,
+                    );
+                }
+                if let Some(new_disk) = &self.new_disk {
+                    new_disk.render(frame);
+                }
+            }
             Section::Network => {
                 let network = Text::from("Only User Network backend is supported for this version")
                     .centered();
@@ -892,49 +1003,107 @@ impl VMBuilder {
                     (chunks[0], chunks[1])
                 };
                 let items = [
-                    Line::from(vec![
-                        Span::from("Name          ").bold(),
-                        Span::from(" ".repeat(6)),
-                        Span::from(self.name.field.value()),
+                    ListItem::from(vec![
+                        Line::from(vec![
+                            Span::from("Name          ").bold(),
+                            Span::from(" ".repeat(6)),
+                            Span::from(self.name.field.value()),
+                        ]),
+                        Line::from(""),
                     ]),
-                    Line::from(vec![
-                        Span::from("Distro        ").bold(),
-                        Span::from(" ".repeat(6)),
-                        Span::from(self.distro.to_string()),
+                    ListItem::from(vec![
+                        Line::from(vec![
+                            Span::from("Distro        ").bold(),
+                            Span::from(" ".repeat(6)),
+                            Span::from(self.distro.to_string()),
+                        ]),
+                        Line::from(""),
                     ]),
-                    Line::from(vec![
-                        Span::from("Arch          ").bold(),
-                        Span::from(" ".repeat(6)),
-                        Span::from(self.arch.to_string()),
+                    ListItem::from(vec![
+                        Line::from(vec![
+                            Span::from("Arch          ").bold(),
+                            Span::from(" ".repeat(6)),
+                            Span::from(self.arch.to_string()),
+                        ]),
+                        Line::from(""),
                     ]),
-                    Line::from(vec![
-                        Span::from("vCPU          ").bold(),
-                        Span::from(" ".repeat(6)),
-                        Span::from(self.vcpus.field.value()),
+                    ListItem::from(vec![
+                        Line::from(vec![
+                            Span::from("vCPU          ").bold(),
+                            Span::from(" ".repeat(6)),
+                            Span::from(self.vcpus.field.value()),
+                        ]),
+                        Line::from(""),
                     ]),
-                    Line::from(vec![
-                        Span::from("Memory        ").bold(),
-                        Span::from(" ".repeat(6)),
-                        Span::from(format!("{} MB", self.memory.field.value())),
+                    ListItem::from(vec![
+                        Line::from(vec![
+                            Span::from("Memory        ").bold(),
+                            Span::from(" ".repeat(6)),
+                            Span::from(format!("{} MB", self.memory.field.value())),
+                        ]),
+                        Line::from(""),
                     ]),
-                    Line::from(vec![
-                        Span::from("Firmware      ").bold(),
-                        Span::from(" ".repeat(6)),
-                        Span::from(if self.enable_uefi { "UEFI" } else { "BIOS" }),
+                    ListItem::from(vec![
+                        Line::from(vec![
+                            Span::from("Firmware      ").bold(),
+                            Span::from(" ".repeat(6)),
+                            Span::from(if self.enable_uefi { "UEFI" } else { "BIOS" }),
+                        ]),
+                        Line::from(""),
                     ]),
-                    Line::from(vec![
-                        Span::from("Network       ").bold(),
-                        Span::from(" ".repeat(6)),
-                        Span::from(self.network.to_string()),
+                    ListItem::from(vec![
+                        Line::from(vec![
+                            Span::from("Network       ").bold(),
+                            Span::from(" ".repeat(6)),
+                            Span::from(self.network.to_string()),
+                        ]),
+                        Line::from(""),
                     ]),
-                    Line::from(vec![
-                        Span::from("Cloudinit Path").bold(),
-                        Span::from(" ".repeat(6)),
-                        Span::from(if self.cloudinit.field.value().is_empty() {
-                            "Not Specified"
+                    ListItem::from({
+                        let mut lines = Vec::new();
+                        if self.disks.is_empty() {
+                            vec![
+                                Line::from(vec![
+                                    Span::from("Disks        ").bold(),
+                                    Span::from(" ".repeat(6)),
+                                ]),
+                                Line::from(""),
+                            ]
                         } else {
-                            self.cloudinit.field.value()
-                        }),
+                            lines.push(Line::from(vec![
+                                Span::from("Disks        ").bold(),
+                                Span::from(" ".repeat(6)),
+                                Span::from(format!(
+                                    " Disk 0: size={}GB, format={}",
+                                    self.disks[0].size, self.disks[0].format
+                                )),
+                            ]));
+                            for (index, disk) in self.disks.iter().skip(1).enumerate() {
+                                lines.push(Line::from(vec![
+                                    Span::from(" ".repeat(20)),
+                                    Span::from(format!(
+                                        "Disk {}: size={}GB, format={}",
+                                        index + 1,
+                                        disk.size,
+                                        disk.format
+                                    )),
+                                ]))
+                            }
+                            lines.push(Line::from(""));
+                            lines
+                        }
+                    }),
+                    ListItem::from(vec![
+                        Line::from(vec![
+                            Span::from("Cloudinit Path").bold(),
+                            Span::from(" ".repeat(6)),
+                            Span::from(if self.cloudinit.field.value().is_empty() {
+                                "Not Specified"
+                            } else {
+                                self.cloudinit.field.value()
+                            }),
+                        ]),
+                        Line::from(""),
                     ]),
                 ];
 
