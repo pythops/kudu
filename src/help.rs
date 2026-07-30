@@ -65,6 +65,21 @@ impl Help {
                     Span::from(" Nav"),
                 ])]
             }
+            FocusedSection::DeleteConfirmation => {
+                vec![Line::from(vec![
+                    Span::from("h,←").bold(),
+                    Span::from("  Left"),
+                    Span::from(" | "),
+                    Span::from("l,→").bold(),
+                    Span::from("  Right"),
+                    Span::from(" | "),
+                    Span::from("Esc").bold(),
+                    Span::from(" Cancel"),
+                    Span::from(" | "),
+                    Span::from("Enter").bold(),
+                    Span::from(" Confirm"),
+                ])]
+            }
         };
 
         let message = Paragraph::new(message).centered().blue();

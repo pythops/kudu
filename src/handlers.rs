@@ -5,7 +5,8 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::{
     app::{App, FocusedSection},
-    event::Event::{self, DeleteVm, NewVM},
+    confirmation::delete::DeleteConfirmation,
+    event::Event::{self, NewVM},
 };
 
 pub fn handle_key_events(key_event: KeyEvent, app: &mut App, sender: Sender<Event>) -> Result<()> {
@@ -13,6 +14,17 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App, sender: Sender<Even
         FocusedSection::NewVM => {
             if let Some(vm_builder) = &mut app.new_vm {
                 vm_builder.handle_key_events(key_event, sender)?;
+            }
+        }
+
+        FocusedSection::DeleteConfirmation => {
+            if let KeyCode::Esc = key_event.code {
+                app.focused_section = FocusedSection::Main;
+                app.delete_confirmation = None;
+                return Ok(());
+            }
+            if let Some(delete_confirmation) = &mut app.delete_confirmation {
+                delete_confirmation.handle_key_events(key_event, sender)?;
             }
         }
 
@@ -54,10 +66,9 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App, sender: Sender<Even
             }
 
             KeyCode::Char('d') => {
-                if let Some(index) = app.vm_list_state.selected()
-                    && let Some(vm) = app.vms.get(index)
-                {
-                    sender.send(DeleteVm(vm.id))?;
+                if app.vm_list_state.selected().is_some() {
+                    app.focused_section = FocusedSection::DeleteConfirmation;
+                    app.delete_confirmation = Some(DeleteConfirmation::default());
                 }
             }
 

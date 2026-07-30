@@ -21,6 +21,7 @@ use ratatui::{
 };
 
 use crate::KVM_ENABLED;
+use crate::confirmation::delete::DeleteConfirmation;
 use crate::{
     Arch, event::Event, get_kudu_data_dir, get_kudu_run_dir, help::Help,
     notification::Notification, vm::VM, vmbuilder::VMBuilder,
@@ -31,7 +32,7 @@ pub enum FocusedSection {
     #[default]
     Main,
     NewVM,
-    // TODO: EditVM,
+    DeleteConfirmation, // TODO: EditVM,
 }
 
 #[derive(Debug, Default)]
@@ -56,6 +57,7 @@ pub struct App {
     pub available_archs: Vec<Arch>,
     pub kvm_version: Result<u8>,
     total_memory: Result<usize>,
+    pub delete_confirmation: Option<DeleteConfirmation>,
 }
 
 impl App {
@@ -188,6 +190,7 @@ impl App {
             available_uefi,
             kvm_version,
             total_memory: App::get_total_memory(),
+            delete_confirmation: None,
         })
     }
 
@@ -411,6 +414,10 @@ impl App {
 
         if let Some(vm_builder) = &mut self.new_vm {
             vm_builder.render(frame);
+        }
+
+        if let Some(delete_confirmation) = &mut self.delete_confirmation {
+            delete_confirmation.render(frame);
         }
 
         self.help.render(frame, &self.focused_section, help_block);

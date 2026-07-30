@@ -116,11 +116,12 @@ fn main() -> Result<()> {
                 }
             }
 
-            Event::DeleteVm(id) => {
-                if let Some(index) = app.vms.iter_mut().position(|v| v.id == id) {
-                    if let Some(vm) = app.vms.get_mut(index)
-                        && let Err(error) = vm.delete()
-                    {
+            Event::DeleteVm(choice) => {
+                if let Some(index) = app.vm_list_state.selected()
+                    && let Some(vm) = app.vms.get_mut(index)
+                    && choice
+                {
+                    if let Err(error) = vm.delete() {
                         let notif =
                             kudu::notification::Notification::new(error, NotificationLevel::Error);
 
@@ -128,6 +129,8 @@ fn main() -> Result<()> {
                     }
                     let _ = app.vms.remove(index);
                 }
+                app.delete_confirmation = None;
+                app.focused_section = FocusedSection::Main;
             }
 
             Event::QemuEvent((id, event)) => {

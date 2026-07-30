@@ -27,7 +27,7 @@ pub enum Event {
     Download((uuid::Uuid, DownloadEvent)),
     VMStarted(uuid::Uuid),
     QuitVM(uuid::Uuid),
-    DeleteVm(uuid::Uuid),
+    DeleteVm(bool),
     QemuEvent((uuid::Uuid, qapi::qmp::Event)),
     QemuExit(uuid::Uuid),
 }

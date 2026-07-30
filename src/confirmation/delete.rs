@@ -1,4 +1,3 @@
-pub mod delete;
 use crossterm::event::{
     KeyCode::{self},
     KeyEvent,
@@ -17,24 +16,25 @@ use ratatui::{
 use crate::event::Event;
 
 #[derive(Debug, Clone, Default)]
-pub struct Confirmation {
+pub struct DeleteConfirmation {
     choice: bool,
 }
 
-impl Confirmation {
+impl DeleteConfirmation {
     pub fn handle_key_events(&mut self, key_event: KeyEvent, sender: Sender<Event>) -> Result<()> {
         match key_event.code {
             KeyCode::Left | KeyCode::Char('h') | KeyCode::Right | KeyCode::Char('l') => {
                 self.choice = !self.choice;
             }
             KeyCode::Enter => {
-                sender.send(Event::CancelVM(self.choice))?;
+                sender.send(Event::DeleteVm(self.choice))?;
             }
             _ => {}
         }
 
         Ok(())
     }
+
     pub fn render(&self, frame: &mut Frame) {
         let area = Layout::default()
             .direction(Direction::Vertical)
@@ -66,7 +66,7 @@ impl Confirmation {
             (chunks[0], chunks[1])
         };
 
-        let message = Text::from("Are you sure you want to cancel ?")
+        let message = Text::from("Are you sure you want to delete ?")
             .centered()
             .bold();
 
