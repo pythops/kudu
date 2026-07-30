@@ -23,7 +23,7 @@ use tui_input::{Input, backend::crossterm::EventHandler};
 use crate::{
     Arch,
     cloudinit::Cloudinit,
-    confirmation::Confirmation,
+    confirmation::cancel::CancelConfirmation,
     disk::{Disk, DiskBuilder},
     distro::{
         LinuxDistro::{self, ArchLinux},
@@ -78,7 +78,7 @@ pub struct VMBuilder {
     vcpus: UserInputField,
     memory: UserInputField,
     pub network: Network,
-    pub confirmation: Option<Confirmation>,
+    pub confirmation: Option<CancelConfirmation>,
     enable_uefi: bool,
     ubuntu_release: UbuntuRelease,
     debian_release: DebianRelease,
@@ -254,7 +254,7 @@ impl VMBuilder {
         }
 
         if key_event.code == KeyCode::Esc {
-            self.confirmation = Some(Confirmation::default());
+            self.confirmation = Some(CancelConfirmation::default());
             return Ok(());
         }
 
