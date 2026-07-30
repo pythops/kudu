@@ -137,7 +137,7 @@ impl Qemu {
             .arg("order=d")
             .arg("-drive")
             .arg(format!(
-                "file={},format=qcow2,if=virtio",
+                "file={},if=virtio",
                 vm.get_boot_file().to_string_lossy()
             ));
 
