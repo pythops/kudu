@@ -22,13 +22,14 @@ use crate::{
     get_kudu_data_dir,
 };
 
-#[derive(Debug, Clone, Copy, strum_macros::Display, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Copy, strum_macros::Display, Deserialize, Serialize)]
 #[non_exhaustive]
 pub enum LinuxDistro {
     #[strum(to_string = "Arch Linux (btw)")]
     ArchLinux,
     Debian(DebianRelease),
     Ubuntu(UbuntuRelease),
+    TempleOS,
 }
 
 impl Default for LinuxDistro {
@@ -59,6 +60,9 @@ impl LinuxDistro {
             LinuxDistro::ArchLinux => {
                 path.push("arch.qcow2");
             }
+            LinuxDistro::TempleOS => {
+                path.push("templeos.iso");
+            }
         }
 
         path
@@ -73,6 +77,7 @@ impl LinuxDistro {
                 "https://geo.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2"
                     .to_string()
             }
+            LinuxDistro::TempleOS => "https://templeos.org/Downloads/TempleOS.ISO".to_string(),
         };
 
         if !path.exists() {

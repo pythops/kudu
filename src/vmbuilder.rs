@@ -26,7 +26,7 @@ use crate::{
     confirmation::cancel::CancelConfirmation,
     disk::{Disk, DiskBuilder},
     distro::{
-        LinuxDistro::{self, ArchLinux},
+        LinuxDistro::{self, ArchLinux, TempleOS},
         debian::DebianRelease,
         ubuntu::UbuntuRelease,
     },
@@ -140,7 +140,8 @@ impl VMBuilder {
             BootOption::CloudImage => match self.distro {
                 LinuxDistro::Debian(_) => Some(LinuxDistro::Debian(self.debian_release)),
                 LinuxDistro::Ubuntu(_) => Some(LinuxDistro::Ubuntu(self.ubuntu_release)),
-                ArchLinux => Some(ArchLinux),
+                LinuxDistro::ArchLinux => Some(ArchLinux),
+                LinuxDistro::TempleOS => Some(TempleOS),
             },
             BootOption::LocalFile => None,
         };
@@ -393,18 +394,28 @@ impl VMBuilder {
                                 self.distro = LinuxDistro::ArchLinux;
                             }
                             LinuxDistro::ArchLinux => {
+                                self.distro = LinuxDistro::TempleOS;
+                                self.enable_uefi = false;
+                                self.arch = Arch::X86_64;
+                            }
+                            LinuxDistro::TempleOS => {
                                 self.distro = LinuxDistro::Debian(DebianRelease::default());
                             }
                         },
                         KeyCode::Right | KeyCode::Char('l') => match self.distro {
                             LinuxDistro::Debian(_) => {
-                                self.distro = LinuxDistro::ArchLinux;
+                                self.distro = LinuxDistro::TempleOS;
+                                self.enable_uefi = false;
+                                self.arch = Arch::X86_64;
                             }
                             LinuxDistro::Ubuntu(_) => {
                                 self.distro = LinuxDistro::Debian(DebianRelease::default());
                             }
                             LinuxDistro::ArchLinux => {
                                 self.distro = LinuxDistro::Ubuntu(UbuntuRelease::default());
+                            }
+                            LinuxDistro::TempleOS => {
+                                self.distro = LinuxDistro::ArchLinux;
                             }
                         },
                         _ => {}
@@ -417,7 +428,7 @@ impl VMBuilder {
                             self.focused_section = Section::Distro(DistroSection::Cloudinit);
                         }
                         KeyCode::Right | KeyCode::Char('l') => match self.distro {
-                            LinuxDistro::ArchLinux => {}
+                            LinuxDistro::ArchLinux | LinuxDistro::TempleOS => {}
                             LinuxDistro::Debian(_) => match self.debian_release {
                                 DebianRelease::Trixie => {
                                     self.debian_release = DebianRelease::Bookworm;
@@ -442,7 +453,7 @@ impl VMBuilder {
                             },
                         },
                         KeyCode::Left | KeyCode::Char('h') => match self.distro {
-                            LinuxDistro::ArchLinux => {}
+                            LinuxDistro::ArchLinux | LinuxDistro::TempleOS => {}
                             LinuxDistro::Debian(_) => match self.debian_release {
                                 DebianRelease::Trixie => {
                                     self.debian_release = DebianRelease::Forky;
@@ -514,54 +525,79 @@ impl VMBuilder {
                                 .handle_event(&crossterm::event::Event::Key(key_event));
                         }
                     },
-                    HardwareSection::Arch => match key_event.code {
-                        KeyCode::Right | KeyCode::Char('l') => match self.arch {
-                            Arch::X86_64 => {
-                                self.arch = Arch::Riscv64;
+                    HardwareSection::Arch => match self.distro {
+                        LinuxDistro::TempleOS | LinuxDistro::ArchLinux => match key_event.code {
+                            KeyCode::Up | KeyCode::Char('k') => {
+                                self.focused_section = Section::Hardware(HardwareSection::Memory);
                             }
-                            Arch::Aarch64 => {
-                                self.arch = Arch::X86_64;
+                            KeyCode::Down | KeyCode::Char('j') => {
+                                self.focused_section = Section::Hardware(HardwareSection::Uefi);
                             }
-                            Arch::Riscv64 => {
-                                self.arch = Arch::Aarch64;
-                            }
+                            _ => {}
                         },
-                        KeyCode::Left | KeyCode::Char('h') => match self.arch {
-                            Arch::X86_64 => {
-                                self.arch = Arch::Aarch64;
+                        _ => match key_event.code {
+                            KeyCode::Right | KeyCode::Char('l') => match self.arch {
+                                Arch::X86_64 => {
+                                    self.arch = Arch::Riscv64;
+                                }
+                                Arch::Aarch64 => {
+                                    self.arch = Arch::X86_64;
+                                }
+                                Arch::Riscv64 => {
+                                    self.arch = Arch::Aarch64;
+                                }
+                            },
+                            KeyCode::Left | KeyCode::Char('h') => match self.arch {
+                                Arch::X86_64 => {
+                                    self.arch = Arch::Aarch64;
+                                }
+                                Arch::Aarch64 => {
+                                    self.arch = Arch::Riscv64;
+                                }
+                                Arch::Riscv64 => {
+                                    self.arch = Arch::X86_64;
+                                }
+                            },
+                            KeyCode::Up | KeyCode::Char('k') => {
+                                self.focused_section = Section::Hardware(HardwareSection::Memory);
                             }
-                            Arch::Aarch64 => {
-                                self.arch = Arch::Riscv64;
+                            KeyCode::Down | KeyCode::Char('j') => {
+                                self.focused_section = Section::Hardware(HardwareSection::Uefi);
                             }
-                            Arch::Riscv64 => {
-                                self.arch = Arch::X86_64;
-                            }
+                            _ => {}
                         },
-                        KeyCode::Up | KeyCode::Char('k') => {
-                            self.focused_section = Section::Hardware(HardwareSection::Memory);
-                        }
-                        KeyCode::Down | KeyCode::Char('j') => {
-                            self.focused_section = Section::Hardware(HardwareSection::Uefi);
-                        }
-                        _ => {}
                     },
-                    HardwareSection::Uefi => match key_event.code {
-                        KeyCode::Right
-                        | KeyCode::Char('l')
-                        | KeyCode::Left
-                        | KeyCode::Char('h')
-                            if self.arch == Arch::X86_64 =>
-                        {
-                            self.enable_uefi = !self.enable_uefi;
+                    HardwareSection::Uefi => {
+                        if self.distro == TempleOS {
+                            match key_event.code {
+                                KeyCode::Up | KeyCode::Char('k') => {
+                                    self.focused_section = Section::Hardware(HardwareSection::Arch);
+                                }
+                                KeyCode::Down | KeyCode::Char('j') => {
+                                    self.focused_section = Section::Hardware(HardwareSection::Cpu);
+                                }
+                                _ => {}
+                            }
+                        } else {
+                            match key_event.code {
+                                KeyCode::Right
+                                | KeyCode::Char('l')
+                                | KeyCode::Left
+                                | KeyCode::Char('h')
+                                    if self.arch == Arch::X86_64 =>
+                                {
+                                    self.enable_uefi = !self.enable_uefi;
+                                }
+                                KeyCode::Up | KeyCode::Char('k') => {
+                                    self.focused_section = Section::Hardware(HardwareSection::Arch);
+                                }
+                                KeyCode::Down | KeyCode::Char('j') => {
+                                    self.focused_section = Section::Hardware(HardwareSection::Cpu);
+                                }
+                                _ => {}
+                            }
                         }
-                        KeyCode::Up | KeyCode::Char('k') => {
-                            self.focused_section = Section::Hardware(HardwareSection::Arch);
-                        }
-                        KeyCode::Down | KeyCode::Char('j') => {
-                            self.focused_section = Section::Hardware(HardwareSection::Cpu);
-                        }
-                        _ => {}
-                    },
+                    }
                 },
                 Section::Disk => match key_event.code {
                     KeyCode::Down | KeyCode::Char('j') => {
@@ -829,7 +865,7 @@ impl VMBuilder {
                                     self.debian_release, self.debian_release as u8,
                                 )
                             }
-                            LinuxDistro::ArchLinux => "-".to_string(),
+                            LinuxDistro::ArchLinux | LinuxDistro::TempleOS => "-".to_string(),
                         }
                     }),
                 ]);
@@ -1044,7 +1080,9 @@ impl VMBuilder {
                     Span::from(" ".repeat(6)),
                     Span::from({
                         if self.arch == Arch::X86_64 {
-                            if self.enable_uefi {
+                            if self.distro == TempleOS {
+                                "[x] BIOS"
+                            } else if self.enable_uefi {
                                 "[x] UEFI        [ ] BIOS"
                             } else {
                                 "[ ] UEFI        [x] BIOS"

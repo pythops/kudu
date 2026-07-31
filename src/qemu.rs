@@ -12,7 +12,7 @@ use std::{
     thread::{self},
 };
 
-use crate::{Arch, KVM_ENABLED, event::Event, vm::VM};
+use crate::{Arch, BootOption, KVM_ENABLED, distro::LinuxDistro::TempleOS, event::Event, vm::VM};
 
 #[derive(Debug, Default, Clone, Copy, strum_macros::Display, Deserialize, Serialize)]
 pub enum Network {
@@ -134,12 +134,29 @@ impl Qemu {
             .arg("-smp")
             .arg(vm.vcpus.to_string())
             .arg("-boot")
-            .arg("order=d")
-            .arg("-drive")
-            .arg(format!(
-                "file={},if=virtio",
-                vm.get_boot_file().to_string_lossy()
-            ));
+            .arg("order=d");
+
+        match vm.boot_option {
+            BootOption::CloudImage => {
+                if Some(TempleOS) == vm.distro {
+                    command.arg("-drive").arg(format!(
+                        "file={},media=cdrom,if=ide",
+                        vm.get_boot_file().to_string_lossy()
+                    ));
+                } else {
+                    command.arg("-drive").arg(format!(
+                        "file={},if=virtio",
+                        vm.get_boot_file().to_string_lossy()
+                    ));
+                }
+            }
+            BootOption::LocalFile => {
+                command.arg("-drive").arg(format!(
+                    "file={},media=cdrom",
+                    vm.get_boot_file().to_string_lossy()
+                ));
+            }
+        }
 
         command.stdout(Stdio::null());
         command.stderr(Stdio::piped());
