@@ -21,7 +21,7 @@ use ratatui::{
 };
 
 use crate::{
-    Arch, KVM_ENABLED,
+    Arch, BootOption, KVM_ENABLED,
     disk::Disk,
     distro::LinuxDistro,
     event::{
@@ -37,7 +37,9 @@ use crate::{
 pub struct VM {
     pub id: uuid::Uuid,
     pub name: String,
-    pub distro: LinuxDistro,
+    pub boot_option: BootOption,
+    pub distro: Option<LinuxDistro>,
+    pub local_file: Option<PathBuf>,
     pub arch: Arch,
     pub vcpus: u16,
     pub memory: u32,
@@ -137,6 +139,13 @@ impl VM {
             path.pop();
         }
 
+        if let Some(src_path) = &mut self.local_file {
+            path.push("boot.iso");
+            fs::copy(src_path, &path)?;
+            self.local_file = Some(path.clone());
+            path.pop();
+        }
+
         let data = serde_json::to_string_pretty(&self)?;
         file.write_all(data.as_bytes())?;
         Ok(())
@@ -208,7 +217,14 @@ impl VM {
         let mut path = get_kudu_data_dir();
         path.push("vms");
         path.push(self.id.to_string());
-        path.push("boot.qcow2");
+        match self.boot_option {
+            BootOption::CloudImage => {
+                path.push("boot.qcow2");
+            }
+            BootOption::LocalFile => {
+                path.push("boot.iso");
+            }
+        }
         path
     }
 
@@ -216,28 +232,37 @@ impl VM {
         thread::spawn({
             let vm = self.clone();
             move || {
-                if !vm.distro.is_available(vm.arch) {
-                    if vm.downloading.load(std::sync::atomic::Ordering::Relaxed) {
-                        return;
-                    } else {
-                        vm.downloading
-                            .store(true, std::sync::atomic::Ordering::Relaxed);
-                    }
-                    if let Err(error) = vm.distro.download(vm.arch, sender.clone(), vm.id) {
-                        vm.downloading
-                            .store(false, std::sync::atomic::Ordering::Relaxed);
-                        let _ =
-                            sender.send(Download((vm.id, DownloadEvent::Error(error.to_string()))));
-                        return;
-                    }
-                    vm.downloading
-                        .store(false, std::sync::atomic::Ordering::Relaxed);
-                }
+                match vm.boot_option {
+                    BootOption::CloudImage => {
+                        let distro = &vm.distro.unwrap();
+                        if !distro.is_available(vm.arch) {
+                            if vm.downloading.load(std::sync::atomic::Ordering::Relaxed) {
+                                return;
+                            } else {
+                                vm.downloading
+                                    .store(true, std::sync::atomic::Ordering::Relaxed);
+                            }
+                            if let Err(error) = distro.download(vm.arch, sender.clone(), vm.id) {
+                                vm.downloading
+                                    .store(false, std::sync::atomic::Ordering::Relaxed);
+                                let _ = sender.send(Download((
+                                    vm.id,
+                                    DownloadEvent::Error(error.to_string()),
+                                )));
+                                return;
+                            }
+                            vm.downloading
+                                .store(false, std::sync::atomic::Ordering::Relaxed);
+                        }
 
-                if !vm.get_boot_file().exists()
-                    && let Err(e) = fs::copy(vm.distro.get_file_path(vm.arch), vm.get_boot_file())
-                {
-                    let _ = sender.send(Event::Notification(Notification::error(e)));
+                        if !vm.get_boot_file().exists()
+                            && let Err(e) =
+                                fs::copy(distro.get_file_path(vm.arch), vm.get_boot_file())
+                        {
+                            let _ = sender.send(Event::Notification(Notification::error(e)));
+                        }
+                    }
+                    BootOption::LocalFile => {}
                 }
 
                 let mut path = get_kudu_run_dir();
@@ -458,14 +483,6 @@ impl VM {
             ]),
             ListItem::from(vec![
                 Line::from(vec![
-                    Span::from("Distro  ").bold().fg(Color::Yellow),
-                    Span::from(" ".repeat(4)),
-                    Span::from(self.distro.to_string()),
-                ]),
-                Line::from(""),
-            ]),
-            ListItem::from(vec![
-                Line::from(vec![
                     Span::from("Arch    ").bold().fg(Color::Yellow),
                     Span::from(" ".repeat(4)),
                     Span::from(self.arch.to_string()),
@@ -473,6 +490,17 @@ impl VM {
                 Line::from(""),
             ]),
         ];
+
+        if self.boot_option == BootOption::CloudImage {
+            items.push(ListItem::from(vec![
+                Line::from(vec![
+                    Span::from("Distro  ").bold().fg(Color::Yellow),
+                    Span::from(" ".repeat(4)),
+                    Span::from(self.distro.unwrap().to_string()),
+                ]),
+                Line::from(""),
+            ]))
+        }
 
         if let Some(vnc_info) = self.vnc.clone() {
             items.push(ListItem::from(vec![

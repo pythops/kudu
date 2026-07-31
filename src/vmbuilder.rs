@@ -21,7 +21,7 @@ use ratatui::{
 use tui_input::{Input, backend::crossterm::EventHandler};
 
 use crate::{
-    Arch,
+    Arch, BootOption,
     cloudinit::Cloudinit,
     confirmation::cancel::CancelConfirmation,
     disk::{Disk, DiskBuilder},
@@ -54,6 +54,8 @@ enum Section {
 enum DistroSection {
     #[default]
     Name,
+    BootOption,
+    LocalFile,
     OS,
     Release,
     Cloudinit,
@@ -70,10 +72,12 @@ enum HardwareSection {
 
 #[derive(Debug, Clone)]
 pub struct VMBuilder {
+    boot_option: BootOption,
     focused_section: Section,
     pub arch: Arch,
     name: UserInputField,
     cloudinit: UserInputField,
+    local_file: UserInputField,
     pub distro: LinuxDistro,
     vcpus: UserInputField,
     memory: UserInputField,
@@ -97,6 +101,7 @@ impl VMBuilder {
     pub fn new() -> VMBuilder {
         Self {
             focused_section: Section::Distro(DistroSection::Name),
+            boot_option: BootOption::default(),
             arch: Arch::try_from(std::env::consts::ARCH).unwrap_or_default(),
             name: UserInputField {
                 field: Input::default(),
@@ -115,6 +120,10 @@ impl VMBuilder {
                 field: Input::default(),
                 error: None,
             },
+            local_file: UserInputField {
+                field: Input::default(),
+                error: None,
+            },
             network: Network::default(),
             confirmation: None,
             enable_uefi: true,
@@ -127,14 +136,24 @@ impl VMBuilder {
     }
 
     pub fn build(&self) -> VM {
-        let distro = match self.distro {
-            LinuxDistro::Debian(_) => LinuxDistro::Debian(self.debian_release),
-            LinuxDistro::Ubuntu(_) => LinuxDistro::Ubuntu(self.ubuntu_release),
-            ArchLinux => ArchLinux,
+        let distro = match self.boot_option {
+            BootOption::CloudImage => match self.distro {
+                LinuxDistro::Debian(_) => Some(LinuxDistro::Debian(self.debian_release)),
+                LinuxDistro::Ubuntu(_) => Some(LinuxDistro::Ubuntu(self.ubuntu_release)),
+                ArchLinux => Some(ArchLinux),
+            },
+            BootOption::LocalFile => None,
+        };
+
+        let local_file = match self.boot_option {
+            BootOption::LocalFile => Some(PathBuf::from(self.local_file.field.value())),
+            BootOption::CloudImage => None,
         };
 
         VM {
             id: uuid::Uuid::new_v4(),
+            boot_option: self.boot_option,
+            local_file,
             arch: self.arch,
             name: self.name.field.to_string(),
             vcpus: self.vcpus.field.to_string().parse::<u16>().unwrap(),
@@ -157,6 +176,7 @@ impl VMBuilder {
 
         self.name.error = None;
         self.cloudinit.error = None;
+        self.local_file.error = None;
 
         if self.name.field.value().is_empty() {
             self.name.error = Some("Field required".into());
@@ -168,6 +188,18 @@ impl VMBuilder {
         {
             self.cloudinit.error = Some("Cloudinit file does not exists".into());
             valid = false;
+        }
+
+        if self.boot_option == BootOption::LocalFile {
+            if self.local_file.field.value().is_empty() {
+                self.local_file.error = Some("Field required".into());
+                return false;
+            }
+
+            if !PathBuf::from(self.local_file.field.value()).exists() {
+                self.local_file.error = Some("Boot file does not exists".into());
+                valid = false;
+            }
         }
 
         valid
@@ -300,7 +332,7 @@ impl VMBuilder {
                             self.focused_section = Section::Distro(DistroSection::Cloudinit);
                         }
                         KeyCode::Down if self.validate_distro_section() => {
-                            self.focused_section = Section::Distro(DistroSection::OS);
+                            self.focused_section = Section::Distro(DistroSection::BootOption);
                         }
                         _ => {
                             self.name
@@ -308,9 +340,47 @@ impl VMBuilder {
                                 .handle_event(&crossterm::event::Event::Key(key_event));
                         }
                     },
-                    DistroSection::OS => match key_event.code {
+                    DistroSection::BootOption => match key_event.code {
                         KeyCode::Up | KeyCode::Char('k') => {
                             self.focused_section = Section::Distro(DistroSection::Name);
+                        }
+                        KeyCode::Down | KeyCode::Char('j') => match self.boot_option {
+                            BootOption::CloudImage => {
+                                self.focused_section = Section::Distro(DistroSection::OS);
+                            }
+                            BootOption::LocalFile => {
+                                self.focused_section = Section::Distro(DistroSection::LocalFile);
+                            }
+                        },
+                        KeyCode::Left
+                        | KeyCode::Char('h')
+                        | KeyCode::Right
+                        | KeyCode::Char('l') => match self.boot_option {
+                            BootOption::CloudImage => {
+                                self.boot_option = BootOption::LocalFile;
+                            }
+                            BootOption::LocalFile => {
+                                self.boot_option = BootOption::CloudImage;
+                            }
+                        },
+                        _ => {}
+                    },
+                    DistroSection::LocalFile => match key_event.code {
+                        KeyCode::Up if self.validate_distro_section() => {
+                            self.focused_section = Section::Distro(DistroSection::BootOption);
+                        }
+                        KeyCode::Down if self.validate_distro_section() => {
+                            self.focused_section = Section::Distro(DistroSection::Cloudinit);
+                        }
+                        _ => {
+                            self.local_file
+                                .field
+                                .handle_event(&crossterm::event::Event::Key(key_event));
+                        }
+                    },
+                    DistroSection::OS => match key_event.code {
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            self.focused_section = Section::Distro(DistroSection::BootOption);
                         }
                         KeyCode::Down | KeyCode::Char('j') => {
                             self.focused_section = Section::Distro(DistroSection::Release);
@@ -399,9 +469,14 @@ impl VMBuilder {
                         _ => {}
                     },
                     DistroSection::Cloudinit => match key_event.code {
-                        KeyCode::Up if self.validate_distro_section() => {
-                            self.focused_section = Section::Distro(DistroSection::Release);
-                        }
+                        KeyCode::Up if self.validate_distro_section() => match self.boot_option {
+                            BootOption::CloudImage => {
+                                self.focused_section = Section::Distro(DistroSection::Release);
+                            }
+                            BootOption::LocalFile => {
+                                self.focused_section = Section::Distro(DistroSection::LocalFile);
+                            }
+                        },
                         KeyCode::Down if self.validate_distro_section() => {
                             self.focused_section = Section::Distro(DistroSection::Name);
                         }
@@ -657,10 +732,11 @@ impl VMBuilder {
 
         match &self.focused_section {
             Section::Distro(distro_section) => {
-                let (name_block, os_block, release_block, cloudinit_block) = {
+                let (name_block, boot_block, os_block, release_block, cloudinit_block) = {
                     let chunks = Layout::default()
                         .direction(Direction::Vertical)
                         .constraints([
+                            Constraint::Length(4),
                             Constraint::Length(4),
                             Constraint::Length(4),
                             Constraint::Length(4),
@@ -669,7 +745,7 @@ impl VMBuilder {
                         .margin(2)
                         .split(area);
 
-                    (chunks[0], chunks[1], chunks[2], chunks[3])
+                    (chunks[0], chunks[1], chunks[2], chunks[3], chunks[4])
                 };
 
                 let name = vec![
@@ -700,6 +776,24 @@ impl VMBuilder {
                         Span::from(self.name.clone().error.unwrap_or("".to_string())).red(),
                     ]),
                 ];
+
+                let boot_option = Line::from(vec![
+                    {
+                        if distro_section == &DistroSection::BootOption {
+                            Span::from("> Boot  ").bold()
+                        } else {
+                            Span::from("  Boot  ")
+                        }
+                    },
+                    Span::from(" ".repeat(6)),
+                    Span::from({
+                        if self.boot_option == BootOption::CloudImage {
+                            "[x] CloudImage        [ ] Local File"
+                        } else {
+                            "[ ] CloudImage        [x] Local File"
+                        }
+                    }),
+                ]);
 
                 let os = Line::from(vec![
                     {
@@ -739,6 +833,42 @@ impl VMBuilder {
                         }
                     }),
                 ]);
+
+                let local_file = vec![
+                    Line::from(vec![
+                        {
+                            if distro_section == &DistroSection::LocalFile {
+                                Span::from("> File Path ").bold()
+                            } else {
+                                Span::from("  File Path ")
+                            }
+                        },
+                        Span::from(" ".repeat(2)),
+                        Span::from({
+                            let original_length: u32 =
+                                self.local_file.field.to_string().len() as u32;
+                            let target_length = 50_u32;
+
+                            self.local_file
+                                .field
+                                .to_string()
+                                .chars()
+                                .chain(std::iter::repeat_n(
+                                    ' ',
+                                    target_length
+                                        .saturating_sub(original_length)
+                                        .try_into()
+                                        .unwrap(),
+                                ))
+                                .collect::<String>()
+                        })
+                        .on_dark_gray(),
+                    ]),
+                    Line::from(vec![
+                        Span::from(" ".repeat(14)),
+                        Span::from(self.local_file.clone().error.unwrap_or("".to_string())).red(),
+                    ]),
+                ];
 
                 let cloudinit = vec![
                     Line::from(vec![
@@ -784,8 +914,16 @@ impl VMBuilder {
                 ];
 
                 frame.render_widget(Text::from(name), name_block);
-                frame.render_widget(os, os_block);
-                frame.render_widget(release, release_block);
+                frame.render_widget(Text::from(boot_option), boot_block);
+                match self.boot_option {
+                    BootOption::CloudImage => {
+                        frame.render_widget(os, os_block);
+                        frame.render_widget(release, release_block);
+                    }
+                    BootOption::LocalFile => {
+                        frame.render_widget(Text::from(local_file), os_block);
+                    }
+                }
                 frame.render_widget(Text::from(cloudinit), cloudinit_block);
 
                 // FIX: cursor shows on the confirmation popup
@@ -796,9 +934,14 @@ impl VMBuilder {
                             let y = area.y + 2;
                             frame.set_cursor_position((x, y));
                         }
+                        DistroSection::LocalFile => {
+                            let x = area.x + self.local_file.field.visual_cursor() as u16 + 16;
+                            let y = area.y + 10;
+                            frame.set_cursor_position((x, y));
+                        }
                         DistroSection::Cloudinit => {
                             let x = area.x + self.cloudinit.field.visual_cursor() as u16 + 16;
-                            let y = area.y + 14;
+                            let y = area.y + 18;
                             frame.set_cursor_position((x, y));
                         }
                         _ => {}
@@ -1002,23 +1145,39 @@ impl VMBuilder {
 
                     (chunks[0], chunks[1])
                 };
-                let items = [
-                    ListItem::from(vec![
-                        Line::from(vec![
-                            Span::from("Name          ").bold(),
-                            Span::from(" ".repeat(6)),
-                            Span::from(self.name.field.value()),
-                        ]),
-                        Line::from(""),
+                let mut items = vec![ListItem::from(vec![
+                    Line::from(vec![
+                        Span::from("Name          ").bold(),
+                        Span::from(" ".repeat(6)),
+                        Span::from(self.name.field.value()),
                     ]),
-                    ListItem::from(vec![
-                        Line::from(vec![
-                            Span::from("Distro        ").bold(),
-                            Span::from(" ".repeat(6)),
-                            Span::from(self.distro.to_string()),
-                        ]),
-                        Line::from(""),
-                    ]),
+                    Line::from(""),
+                ])];
+
+                match self.boot_option {
+                    BootOption::CloudImage => {
+                        items.push(ListItem::from(vec![
+                            Line::from(vec![
+                                Span::from("Distro        ").bold(),
+                                Span::from(" ".repeat(6)),
+                                Span::from(self.distro.to_string()),
+                            ]),
+                            Line::from(""),
+                        ]));
+                    }
+                    BootOption::LocalFile => {
+                        items.push(ListItem::from(vec![
+                            Line::from(vec![
+                                Span::from("Boot iso      ").bold(),
+                                Span::from(" ".repeat(6)),
+                                Span::from(self.local_file.field.value()),
+                            ]),
+                            Line::from(""),
+                        ]));
+                    }
+                };
+
+                items.extend([
                     ListItem::from(vec![
                         Line::from(vec![
                             Span::from("Arch          ").bold(),
@@ -1106,7 +1265,7 @@ impl VMBuilder {
                         ]),
                         Line::from(""),
                     ]),
-                ];
+                ]);
 
                 let list = List::new(items);
                 let create = Text::from(vec![Line::from(""), Line::from("CREATE"), Line::from("")])

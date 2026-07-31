@@ -58,3 +58,10 @@ impl TryFrom<&str> for Arch {
         }
     }
 }
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum BootOption {
+    #[default]
+    CloudImage,
+    LocalFile,
+}
