@@ -565,6 +565,14 @@ impl VM {
         let mut items = vec![
             ListItem::from(vec![
                 Line::from(vec![
+                    Span::from("Id      ").bold().fg(Color::Yellow),
+                    Span::from(" ".repeat(4)),
+                    Span::from(self.id.to_string()),
+                ]),
+                Line::from(""),
+            ]),
+            ListItem::from(vec![
+                Line::from(vec![
                     Span::from("Name    ").bold().fg(Color::Yellow),
                     Span::from(" ".repeat(4)),
                     Span::from(&self.name),
