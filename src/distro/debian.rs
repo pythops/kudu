@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::Arch;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, strum_macros::Display, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, strum::Display, Deserialize, Serialize)]
 pub enum DebianRelease {
     #[default]
     Trixie = 13,

@@ -5,18 +5,19 @@ use serde::{Deserialize, Serialize};
 pub mod app;
 pub mod cloudinit;
 pub mod confirmation;
-pub mod disk;
 pub mod distro;
 pub mod event;
 pub mod handlers;
 pub mod help;
 pub mod notification;
 pub mod qemu;
+pub mod storage;
 pub mod tui;
 pub mod uefi;
 pub mod ui;
 pub mod vm;
 pub mod vmbuilder;
+pub mod vmedit;
 
 static mut KVM_ENABLED: bool = false;
 
@@ -38,7 +39,7 @@ fn get_kudu_run_dir() -> PathBuf {
 }
 
 #[derive(
-    Debug, Default, Clone, Copy, PartialEq, Eq, Hash, strum_macros::Display, Deserialize, Serialize,
+    Debug, Default, Clone, Copy, PartialEq, Eq, Hash, strum::Display, Deserialize, Serialize,
 )]
 pub enum Arch {
     #[default]

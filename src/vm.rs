@@ -22,8 +22,8 @@ use ratatui::{
 
 use crate::{
     Arch, BootOption, KVM_ENABLED,
-    disk::Disk,
-    distro::LinuxDistro,
+    cloudinit::Cloudinit,
+    distro::LinuxDistro::{self, TempleOS},
     event::{
         DownloadEvent,
         Event::{self, Download, VMStarted},
@@ -31,6 +31,9 @@ use crate::{
     get_kudu_data_dir, get_kudu_run_dir,
     notification::{Notification, NotificationLevel},
     qemu::Qemu,
+    storage::{Drive, Format, Interface, Media},
+    vmbuilder::VMBuildData,
+    vmedit::VMEditData,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,14 +42,10 @@ pub struct VM {
     pub name: String,
     pub boot_option: BootOption,
     pub distro: Option<LinuxDistro>,
-    pub local_file: Option<PathBuf>,
     pub arch: Arch,
-    pub vcpus: u16,
+    pub vcpu: u16,
     pub memory: u32,
-    pub cloudinit: Option<PathBuf>,
-    pub enable_uefi: bool,
-    pub uefi: Option<(PathBuf, PathBuf)>,
-    pub disks: Vec<Disk>,
+    pub drives: Vec<Drive>,
 
     #[serde(skip)]
     pub downloading: Arc<AtomicBool>,
@@ -105,9 +104,12 @@ impl VM {
         Ok(vms)
     }
 
-    pub fn create(&mut self) -> Result<()> {
+    pub fn create(data: VMBuildData) -> Result<VM> {
+        let mut drives = Vec::new();
+
+        let id = uuid::Uuid::new_v4();
         let mut path = get_kudu_data_dir().join("vms");
-        path.push(self.id.to_string());
+        path.push(id.to_string());
         fs::create_dir(&path)
             .with_context(|| format!("Can not create {}", path.to_string_lossy()))?;
 
@@ -116,38 +118,164 @@ impl VM {
             .with_context(|| format!("Can not create {}", path.to_string_lossy()))?;
         path.pop();
 
-        if let Some(cloudinit_path) = &self.cloudinit {
+        if let Some(cloudinit_path) = data.cloudinit {
             path.push("cloudinit.iso");
-            fs::copy(cloudinit_path, &path)?;
-            self.cloudinit = Some(path.clone());
+            Cloudinit::from_path(&cloudinit_path, &path)?;
+            let drive = Drive {
+                path: path.clone(),
+                interface: Interface::Virtio,
+                media: Media::CdRom,
+                format: Format::Raw,
+                read_only: true,
+                unit: None,
+                size: None,
+            };
+            drives.push(drive);
             path.pop();
         }
 
-        if self.enable_uefi
-            && let Ok((code, vars)) = VM::get_uefi_file_path(self.arch)
+        if data.enable_uefi
+            && let Ok((code, vars)) = VM::get_uefi_file_path(data.arch)
         {
             path.push("uefi_vars.fd");
             fs::copy(vars, &path)?;
-            self.uefi = Some((code, path.clone()));
+            let vars = path.clone();
             path.pop();
+
+            let uefi_code_drive = Drive {
+                path: code,
+                interface: Interface::Pflash,
+                format: Format::Raw,
+                unit: Some(0),
+                media: Media::Disk,
+                read_only: true,
+                size: None,
+            };
+
+            let uefi_vars_drive = Drive {
+                path: vars,
+                interface: Interface::Pflash,
+                format: Format::Raw,
+                unit: Some(1),
+                media: Media::Disk,
+                read_only: false,
+                size: None,
+            };
+
+            drives.push(uefi_code_drive);
+            drives.push(uefi_vars_drive);
         }
 
-        for (index, disk) in &mut self.disks.iter_mut().enumerate() {
+        for (index, disk) in data.disks.iter().enumerate() {
             path.push(format!("disk_{}", index));
-            fs::copy(&disk.path, &path)?;
-            disk.path = path.to_owned();
+
+            disk.create(&path)
+                .with_context(|| format!("Can no create {}", path.to_string_lossy()))?;
+
+            let drive = Drive {
+                path: path.clone(),
+                interface: Interface::Virtio,
+                format: disk.format,
+                media: Media::Disk,
+                read_only: false,
+                unit: None,
+                size: Some(disk.size),
+            };
+
+            drives.push(drive);
             path.pop();
         }
 
-        if let Some(src_path) = &mut self.local_file {
-            path.push("boot.iso");
-            fs::copy(src_path, &path)?;
-            self.local_file = Some(path.clone());
-            path.pop();
+        if let Some(path) = data.local_file {
+            let drive = Drive {
+                path: path.clone(),
+                interface: Interface::Virtio,
+                format: Format::Raw,
+                media: Media::CdRom,
+                read_only: true,
+                unit: None,
+                size: None,
+            };
+
+            drives.push(drive);
         }
 
-        let data = serde_json::to_string_pretty(&self)?;
+        let vm = VM {
+            id,
+            name: data.name,
+            boot_option: data.boot_option,
+            distro: data.distro,
+            arch: data.arch,
+            vcpu: data.vcpu,
+            memory: data.memory,
+            drives,
+            downloading: Arc::new(AtomicBool::new(false)),
+            events: Vec::new(),
+            events_state: ListState::default(),
+            vnc: None,
+            state: RunState::shutdown,
+        };
+
+        let data = serde_json::to_string_pretty(&vm)?;
         file.write_all(data.as_bytes())?;
+        Ok(vm)
+    }
+
+    pub fn disks(&self) -> Vec<Drive> {
+        self.drives
+            .clone()
+            .into_iter()
+            .filter(|drive| {
+                drive.interface == Interface::Virtio
+                    && drive.media == Media::Disk
+                    && drive.path != self.get_boot_file()
+                    && drive.size.is_some()
+            })
+            .collect()
+    }
+
+    pub fn edit(&mut self, data: VMEditData) -> Result<()> {
+        self.vcpu = data.new_vcpu;
+        self.memory = data.new_memory;
+
+        for path in data.deleted_disks {
+            if path.exists() {
+                fs::remove_file(&path)
+                    .with_context(|| format!("can not remove {}", path.to_string_lossy()))?;
+            }
+            self.drives.retain(|drive| drive.path != path);
+        }
+
+        let mut path = get_kudu_data_dir().join("vms");
+        path.push(self.id.to_string());
+
+        let disks_len = self.disks().len();
+        for (index, disk) in data.added_disks.iter().enumerate() {
+            let index = index + disks_len;
+            path.push(format!("disk_{}", index));
+
+            disk.create(&path)
+                .with_context(|| format!("Can not create {}", path.to_string_lossy()))?;
+
+            let drive = Drive {
+                path: path.clone(),
+                interface: Interface::Virtio,
+                format: disk.format,
+                media: Media::Disk,
+                read_only: false,
+                unit: None,
+                size: None,
+            };
+
+            self.drives.push(drive);
+            path.pop();
+        }
+
+        path.push("vm.json");
+        let mut file = File::create(&path)?;
+        let vm = serde_json::to_string_pretty(&self)?;
+        file.write_all(vm.as_bytes())?;
+
         Ok(())
     }
 
@@ -217,77 +345,105 @@ impl VM {
         let mut path = get_kudu_data_dir();
         path.push("vms");
         path.push(self.id.to_string());
-        match self.boot_option {
-            BootOption::CloudImage => {
-                path.push("boot.qcow2");
-            }
-            BootOption::LocalFile => {
-                path.push("boot.iso");
-            }
-        }
+        path.push("boot");
         path
     }
 
-    fn start(&mut self, sender: Sender<Event>) {
-        thread::spawn({
-            let vm = self.clone();
-            move || {
-                match vm.boot_option {
-                    BootOption::CloudImage => {
-                        let distro = &vm.distro.unwrap();
-                        if !distro.is_available(vm.arch) {
-                            if vm.downloading.load(std::sync::atomic::Ordering::Relaxed) {
-                                return;
-                            } else {
-                                vm.downloading
-                                    .store(true, std::sync::atomic::Ordering::Relaxed);
-                            }
-                            if let Err(error) = distro.download(vm.arch, sender.clone(), vm.id) {
-                                vm.downloading
-                                    .store(false, std::sync::atomic::Ordering::Relaxed);
-                                let _ = sender.send(Download((
-                                    vm.id,
-                                    DownloadEvent::Error(error.to_string()),
-                                )));
-                                return;
-                            }
+    pub fn start(&mut self, sender: Sender<Event>) -> Result<()> {
+        if self.boot_option == BootOption::CloudImage {
+            let distro = self.distro.unwrap();
+            if !distro.is_available(self.arch) {
+                thread::spawn({
+                    let vm = self.clone();
+                    let sender = sender.clone();
+                    move || {
+                        if vm.downloading.load(std::sync::atomic::Ordering::Relaxed) {
+                            return;
+                        } else {
+                            vm.downloading
+                                .store(true, std::sync::atomic::Ordering::Relaxed);
+                        }
+                        if let Err(error) = distro.download(vm.arch, sender.clone(), vm.id) {
                             vm.downloading
                                 .store(false, std::sync::atomic::Ordering::Relaxed);
+                            let _ = sender
+                                .send(Download((vm.id, DownloadEvent::Error(error.to_string()))));
+                            return;
                         }
-
-                        if !vm.get_boot_file().exists()
-                            && let Err(e) =
-                                fs::copy(distro.get_file_path(vm.arch), vm.get_boot_file())
-                        {
-                            let _ = sender.send(Event::Notification(Notification::error(e)));
-                        }
+                        vm.downloading
+                            .store(false, std::sync::atomic::Ordering::Relaxed);
                     }
-                    BootOption::LocalFile => {}
-                }
-
-                let mut path = get_kudu_run_dir();
-                path.push(vm.id.to_string());
-                if !path.exists()
-                    && let Err(e) = fs::create_dir(&path)
+                });
+                return Ok(());
+            } else {
+                if !self.get_boot_file().exists()
+                    && let Err(e) = fs::copy(distro.get_file_path(self.arch), self.get_boot_file())
                 {
                     let _ = sender.send(Event::Notification(Notification::error(e)));
                 }
 
-                match Qemu::start(&vm, sender.clone()) {
-                    Ok(pid) => {
-                        let pid_file_path = VM::get_pid_file(vm.id);
-                        if let Err(e) = fs::write(pid_file_path, pid.to_string()) {
-                            let _ = sender.send(Event::Notification(Notification::error(e)));
-                        }
+                if Some(TempleOS) == self.distro {
+                    let drive = Drive {
+                        path: self.get_boot_file(),
+                        interface: Interface::Ide,
+                        media: Media::CdRom,
+                        format: Format::Raw,
+                        unit: None,
+                        read_only: true,
+                        size: None,
+                    };
 
-                        let _ = sender.send(VMStarted(vm.id));
+                    if !self.drives.contains(&drive) {
+                        self.drives.push(drive);
                     }
-                    Err(e) => {
-                        let _ = sender.send(Event::Notification(Notification::error(e)));
+                } else {
+                    let drive = Drive {
+                        path: self.get_boot_file(),
+                        interface: Interface::Virtio,
+                        media: Media::Disk,
+                        format: Format::Qcow2,
+                        unit: None,
+                        read_only: false,
+                        size: None,
+                    };
+
+                    if !self.drives.contains(&drive) {
+                        self.drives.push(drive);
                     }
                 }
+
+                let mut path = get_kudu_data_dir().join("vms");
+                path.push(self.id.to_string());
+                path.push("vm.json");
+                let mut file = File::create(&path)?;
+                let vm = serde_json::to_string_pretty(&self)?;
+                file.write_all(vm.as_bytes())?;
             }
-        });
+        }
+
+        let mut path = get_kudu_run_dir();
+        path.push(self.id.to_string());
+        if !path.exists()
+            && let Err(e) = fs::create_dir(&path)
+        {
+            let _ = sender.send(Event::Notification(Notification::error(e)));
+        }
+
+        match Qemu::start(self, sender.clone()) {
+            Ok(pid) => {
+                let pid_file_path = VM::get_pid_file(self.id);
+                if let Err(e) = fs::write(pid_file_path, pid.to_string()) {
+                    let _ = sender.send(Event::Notification(Notification::error(e)));
+                }
+
+                let _ = sender.send(VMStarted(self.id));
+            }
+            Err(e) => {
+                let _ = sender.send(Event::Notification(Notification::error(e)));
+            }
+        }
+
+        Ok(())
     }
 
     pub fn save_events_to_file(&self) -> Result<()> {
@@ -328,13 +484,10 @@ impl VM {
                     Qemu::resume(self.id)?;
                 }
                 RunState::shutdown => {
-                    self.start(sender);
+                    let _ = self.start(sender);
                 }
                 _ => {}
             },
-            KeyCode::Char('e') if self.state == RunState::shutdown => {
-                //TODO: edit
-            }
             KeyCode::Char('s') => {
                 if let Err(error) = Qemu::power_down(self.id) {
                     let notif =
@@ -388,6 +541,11 @@ impl VM {
             events_block,
         );
 
+        let enable_uefi = self
+            .drives
+            .iter()
+            .any(|drive| drive.interface == Interface::Pflash);
+
         let mut items = vec![
             ListItem::from(vec![
                 Line::from(vec![
@@ -409,7 +567,7 @@ impl VM {
                 Line::from(vec![
                     Span::from("vCPU    ").bold().fg(Color::Yellow),
                     Span::from(" ".repeat(4)),
-                    Span::from(self.vcpus.to_string()),
+                    Span::from(self.vcpu.to_string()),
                 ]),
                 Line::from(""),
             ]),
@@ -425,13 +583,14 @@ impl VM {
                 Line::from(vec![
                     Span::from("Firmware").bold().fg(Color::Yellow),
                     Span::from(" ".repeat(4)),
-                    Span::from(if self.enable_uefi { "UEFI" } else { "BIOS" }),
+                    Span::from(if enable_uefi { "UEFI" } else { "BIOS" }),
                 ]),
                 Line::from(""),
             ]),
             ListItem::from({
                 let mut lines = Vec::new();
-                if self.disks.is_empty() {
+                let disks = self.disks();
+                if disks.is_empty() {
                     vec![
                         Line::from(vec![
                             Span::from("Disks  ").bold().fg(Color::Yellow),
@@ -446,16 +605,17 @@ impl VM {
                         Span::from(" ".repeat(4)),
                         Span::from(format!(
                             " Disk 0: size={}GiB, format={}",
-                            self.disks[0].size, self.disks[0].format
+                            disks[0].size.unwrap(),
+                            disks[0].format
                         )),
                     ]));
-                    for (index, disk) in self.disks.iter().skip(1).enumerate() {
+                    for (index, disk) in disks.iter().skip(1).enumerate() {
                         lines.push(Line::from(vec![
                             Span::from(" ".repeat(12)),
                             Span::from(format!(
                                 "Disk {}: size={}GiB, format={}",
                                 index + 1,
-                                disk.size,
+                                disk.size.unwrap(),
                                 disk.format
                             )),
                         ]))

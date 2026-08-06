@@ -25,6 +25,9 @@ impl Help {
                     Span::from("n").bold(),
                     Span::from(" New"),
                     Span::from(" | "),
+                    Span::from("e").bold(),
+                    Span::from(" Edit"),
+                    Span::from(" | "),
                     Span::from("d").bold(),
                     Span::from(" Delete"),
                     Span::from(" | "),
@@ -67,6 +70,27 @@ impl Help {
             }
             FocusedSection::DeleteConfirmation => {
                 vec![Line::from(vec![
+                    Span::from("h,←").bold(),
+                    Span::from("  Left"),
+                    Span::from(" | "),
+                    Span::from("l,→").bold(),
+                    Span::from("  Right"),
+                    Span::from(" | "),
+                    Span::from("Esc").bold(),
+                    Span::from(" Cancel"),
+                    Span::from(" | "),
+                    Span::from("Enter").bold(),
+                    Span::from(" Confirm"),
+                ])]
+            }
+            FocusedSection::EditVM => {
+                vec![Line::from(vec![
+                    Span::from("↑").bold(),
+                    Span::from("  Up"),
+                    Span::from(" | "),
+                    Span::from("↓").bold(),
+                    Span::from("  Down"),
+                    Span::from(" | "),
                     Span::from("h,←").bold(),
                     Span::from("  Left"),
                     Span::from(" | "),

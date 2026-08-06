@@ -1,10 +1,10 @@
-use chrono::Utc;
 use crossterm::event::{
     KeyCode::{self},
     KeyEvent,
 };
+use rustix::path::Arg;
 use serde::{Deserialize, Serialize};
-use std::process::Command;
+use std::{path::Path, process::Command};
 
 use anyhow::Result;
 use ratatui::{
@@ -16,7 +16,79 @@ use ratatui::{
 };
 use tui_input::{Input, backend::crossterm::EventHandler};
 
+use serde_json::Value;
 use std::path::PathBuf;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Drive {
+    pub path: PathBuf,
+    pub interface: Interface,
+    pub media: Media,
+    pub format: Format,
+    pub read_only: bool,
+    pub unit: Option<u16>,
+    pub size: Option<u64>,
+}
+
+impl Drive {
+    pub fn size(&self) -> Result<u64> {
+        let output = Command::new("qemu-img")
+            .arg("info")
+            .arg("--output")
+            .arg("json")
+            .arg(self.path.clone())
+            .output()?;
+
+        let output = String::from_utf8(output.stdout)?;
+        let output: Value = serde_json::from_str(&output)?;
+        Ok(output["virtual-size"].as_u64().unwrap() / (1024 * 1024 * 1024))
+    }
+
+    pub fn to_qemu_arg(&self) -> String {
+        let mut args = Vec::new();
+
+        args.push(format!("file={}", self.path.to_string_lossy()));
+
+        args.push(format!("if={}", self.interface));
+
+        args.push(format!("format={}", self.format));
+
+        if self.read_only || self.media == Media::CdRom {
+            args.push("readonly=on".to_string());
+        }
+
+        if let Some(unit) = self.unit {
+            args.push(format!("unit={}", unit));
+        }
+
+        args.join(",").to_string()
+    }
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, strum::Display)]
+#[strum(serialize_all = "snake_case")]
+pub enum Interface {
+    #[default]
+    Virtio,
+    Ide,
+    Pflash,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, strum::Display, Serialize, Deserialize)]
+#[strum(serialize_all = "snake_case")]
+pub enum Media {
+    #[default]
+    Disk,
+    CdRom,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct DiskBuilder {
+    section: Section,
+    pub format: Format,
+    size: UserInputField,
+}
 
 #[derive(Debug, Clone, Default)]
 struct UserInputField {
@@ -26,23 +98,30 @@ struct UserInputField {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Disk {
-    pub path: PathBuf,
-    pub size: u32,
-    pub format: DiskFormat,
+    pub size: u64,
+    pub format: Format,
 }
 
-#[derive(Debug, Clone, Default, strum_macros::Display, Serialize, Deserialize)]
-pub enum DiskFormat {
+impl Disk {
+    pub fn create(&self, path: &Path) -> Result<()> {
+        Command::new("qemu-img")
+            .arg("create")
+            .arg("-f")
+            .arg(self.format.to_string().to_lowercase())
+            .arg(path)
+            .arg(format!("{}G", self.size))
+            .output()?;
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Default, strum::Display, Serialize, Deserialize)]
+#[strum(serialize_all = "snake_case")]
+pub enum Format {
     #[default]
     Qcow2,
     Raw,
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct DiskBuilder {
-    section: Section,
-    size: UserInputField,
-    format: DiskFormat,
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -53,6 +132,10 @@ enum Section {
 }
 
 impl DiskBuilder {
+    pub fn new() -> Self {
+        DiskBuilder::default()
+    }
+
     pub fn handle_key_events(&mut self, key_event: KeyEvent) {
         match key_event.code {
             KeyCode::Down | KeyCode::Up => match self.section {
@@ -61,8 +144,8 @@ impl DiskBuilder {
             },
             KeyCode::Left | KeyCode::Right if self.section == Section::Format => {
                 match self.format {
-                    DiskFormat::Qcow2 => self.format = DiskFormat::Raw,
-                    DiskFormat::Raw => self.format = DiskFormat::Qcow2,
+                    Format::Qcow2 => self.format = Format::Raw,
+                    Format::Raw => self.format = Format::Qcow2,
                 }
             }
 
@@ -100,20 +183,11 @@ impl DiskBuilder {
         valid
     }
 
-    pub fn build(&self) -> Result<Disk> {
-        let size = self.size.field.value().parse::<u32>().unwrap();
-        let format = self.format.clone();
-        let path = std::env::temp_dir().join(format!("kudu_disk_{}", Utc::now().timestamp()));
+    pub fn build(&self) -> Disk {
+        let size = self.size.field.value().parse::<u64>().unwrap();
+        let format = self.format;
 
-        Command::new("qemu-img")
-            .arg("create")
-            .arg("-f")
-            .arg(format.to_string().to_lowercase())
-            .arg(&path)
-            .arg(format!("{size}G"))
-            .output()?;
-
-        Ok(Disk { path, size, format })
+        Disk { size, format }
     }
 
     pub fn render(&self, frame: &mut Frame) {

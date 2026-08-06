@@ -1,30 +1,20 @@
 use anyhow::Result;
-use std::{
-    mem::discriminant,
-    path::PathBuf,
-    sync::{Arc, atomic::AtomicBool, mpsc::Sender},
-};
+use std::{mem::discriminant, path::PathBuf, sync::mpsc::Sender};
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use qapi::qmp::RunState;
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span, Text},
-    widgets::{
-        Block, BorderType, Borders, Clear, List, ListItem, ListState, Padding, Row, Table,
-        TableState,
-    },
+    widgets::{Block, BorderType, Borders, Clear, List, ListItem, Padding, Row, Table, TableState},
 };
 use tui_input::{Input, backend::crossterm::EventHandler};
 
 use crate::{
     Arch, BootOption,
-    cloudinit::Cloudinit,
     confirmation::cancel::CancelConfirmation,
-    disk::{Disk, DiskBuilder},
     distro::{
         LinuxDistro::{self, ArchLinux, TempleOS},
         debian::DebianRelease,
@@ -32,7 +22,7 @@ use crate::{
     },
     event::Event,
     qemu::Network,
-    vm::VM,
+    storage::{Disk, DiskBuilder},
 };
 
 #[derive(Debug, Clone, Default)]
@@ -72,22 +62,22 @@ enum HardwareSection {
 
 #[derive(Debug, Clone)]
 pub struct VMBuilder {
-    boot_option: BootOption,
     focused_section: Section,
-    pub arch: Arch,
+    boot_option: BootOption,
+    arch: Arch,
     name: UserInputField,
     cloudinit: UserInputField,
     local_file: UserInputField,
-    pub distro: LinuxDistro,
-    vcpus: UserInputField,
+    distro: LinuxDistro,
+    vcpu: UserInputField,
     memory: UserInputField,
-    pub network: Network,
+    network: Network,
     pub confirmation: Option<CancelConfirmation>,
     enable_uefi: bool,
     ubuntu_release: UbuntuRelease,
     debian_release: DebianRelease,
-    pub disks: Vec<Disk>,
-    distk_state: TableState,
+    disks: Vec<Disk>,
+    disk_state: TableState,
     new_disk: Option<DiskBuilder>,
 }
 
@@ -95,6 +85,21 @@ impl Default for VMBuilder {
     fn default() -> Self {
         Self::new()
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct VMBuildData {
+    pub boot_option: BootOption,
+    pub arch: Arch,
+    pub name: String,
+    pub cloudinit: Option<PathBuf>,
+    pub local_file: Option<PathBuf>,
+    pub distro: Option<LinuxDistro>,
+    pub vcpu: u16,
+    pub memory: u32,
+    pub network: Network,
+    pub enable_uefi: bool,
+    pub disks: Vec<Disk>,
 }
 
 impl VMBuilder {
@@ -108,7 +113,7 @@ impl VMBuilder {
                 error: None,
             },
             distro: LinuxDistro::default(),
-            vcpus: UserInputField {
+            vcpu: UserInputField {
                 field: Input::from("1"),
                 error: None,
             },
@@ -130,12 +135,12 @@ impl VMBuilder {
             ubuntu_release: UbuntuRelease::default(),
             debian_release: DebianRelease::default(),
             disks: Vec::new(),
-            distk_state: TableState::default(),
+            disk_state: TableState::default(),
             new_disk: None,
         }
     }
 
-    pub fn build(&self) -> VM {
+    pub fn build(&self) -> VMBuildData {
         let distro = match self.boot_option {
             BootOption::CloudImage => match self.distro {
                 LinuxDistro::Debian(_) => Some(LinuxDistro::Debian(self.debian_release)),
@@ -146,28 +151,32 @@ impl VMBuilder {
             BootOption::LocalFile => None,
         };
 
-        let local_file = match self.boot_option {
-            BootOption::LocalFile => Some(PathBuf::from(self.local_file.field.value())),
-            BootOption::CloudImage => None,
+        let cloudinit = if !self.cloudinit.field.value().is_empty() {
+            Some(PathBuf::from(self.cloudinit.field.value()))
+        } else {
+            None
         };
 
-        VM {
-            id: uuid::Uuid::new_v4(),
+        let local_file = if self.boot_option == BootOption::LocalFile {
+            Some(PathBuf::from(self.local_file.field.value()))
+        } else {
+            None
+        };
+
+        let vcpu = self.vcpu.field.value().parse::<u16>().unwrap();
+        let memory = self.memory.field.value().parse::<u32>().unwrap();
+
+        VMBuildData {
             boot_option: self.boot_option,
-            local_file,
             arch: self.arch,
-            name: self.name.field.to_string(),
-            vcpus: self.vcpus.field.to_string().parse::<u16>().unwrap(),
-            memory: self.memory.field.to_string().parse::<u32>().unwrap(),
-            state: RunState::shutdown,
+            name: self.name.field.value().to_string(),
+            cloudinit,
+            local_file,
             distro,
-            events: Vec::new(),
-            events_state: ListState::default(),
-            vnc: None,
-            cloudinit: Cloudinit::from_path(self.cloudinit.field.value()).ok(),
+            vcpu,
+            memory,
+            network: self.network,
             enable_uefi: self.enable_uefi,
-            uefi: None,
-            downloading: Arc::new(AtomicBool::new(false)),
             disks: self.disks.clone(),
         }
     }
@@ -209,22 +218,22 @@ impl VMBuilder {
     fn validate_harware_section(&mut self) -> bool {
         let mut valid = true;
 
-        self.vcpus.error = None;
+        self.vcpu.error = None;
         self.memory.error = None;
 
-        if self.vcpus.field.value().is_empty() {
-            self.vcpus.error = Some("Field required".into());
+        if self.vcpu.field.value().is_empty() {
+            self.vcpu.error = Some("Field required".into());
             valid = false;
         } else {
-            match self.vcpus.field.value().parse::<u16>() {
+            match self.vcpu.field.value().parse::<u16>() {
                 Ok(v) => {
                     if v == 0 {
-                        self.vcpus.error = Some("vcpu value can not be 0".into());
+                        self.vcpu.error = Some("vcpu value can not be 0".into());
                         valid = false;
                     }
                 }
                 Err(_) => {
-                    self.vcpus.error = Some("vcpu value should be a number".into());
+                    self.vcpu.error = Some("vcpu value should be a number".into());
                     valid = false;
                 }
             }
@@ -268,12 +277,12 @@ impl VMBuilder {
                 }
                 KeyCode::Enter => {
                     if new_disk.validate() {
-                        let disk = new_disk.build()?;
+                        let disk = new_disk.build();
                         self.disks.push(disk);
                         self.new_disk = None;
 
-                        if self.distk_state.selected().is_none() {
-                            self.distk_state.select(Some(0));
+                        if self.disk_state.selected().is_none() {
+                            self.disk_state.select(Some(0));
                         }
                     }
                 }
@@ -329,10 +338,10 @@ impl VMBuilder {
             _ => match &self.focused_section {
                 Section::Distro(distro_section) => match distro_section {
                     DistroSection::Name => match key_event.code {
-                        KeyCode::Up if self.validate_distro_section() => {
+                        KeyCode::Up => {
                             self.focused_section = Section::Distro(DistroSection::Cloudinit);
                         }
-                        KeyCode::Down if self.validate_distro_section() => {
+                        KeyCode::Down => {
                             self.focused_section = Section::Distro(DistroSection::BootOption);
                         }
                         _ => {
@@ -367,10 +376,10 @@ impl VMBuilder {
                         _ => {}
                     },
                     DistroSection::LocalFile => match key_event.code {
-                        KeyCode::Up if self.validate_distro_section() => {
+                        KeyCode::Up => {
                             self.focused_section = Section::Distro(DistroSection::BootOption);
                         }
-                        KeyCode::Down if self.validate_distro_section() => {
+                        KeyCode::Down => {
                             self.focused_section = Section::Distro(DistroSection::Cloudinit);
                         }
                         _ => {
@@ -480,7 +489,7 @@ impl VMBuilder {
                         _ => {}
                     },
                     DistroSection::Cloudinit => match key_event.code {
-                        KeyCode::Up if self.validate_distro_section() => match self.boot_option {
+                        KeyCode::Up => match self.boot_option {
                             BootOption::CloudImage => {
                                 self.focused_section = Section::Distro(DistroSection::Release);
                             }
@@ -488,7 +497,7 @@ impl VMBuilder {
                                 self.focused_section = Section::Distro(DistroSection::LocalFile);
                             }
                         },
-                        KeyCode::Down if self.validate_distro_section() => {
+                        KeyCode::Down => {
                             self.focused_section = Section::Distro(DistroSection::Name);
                         }
                         _ => {
@@ -507,7 +516,7 @@ impl VMBuilder {
                             self.focused_section = Section::Hardware(HardwareSection::Memory);
                         }
                         _ => {
-                            self.vcpus
+                            self.vcpu
                                 .field
                                 .handle_event(&crossterm::event::Event::Key(key_event));
                         }
@@ -601,36 +610,36 @@ impl VMBuilder {
                 },
                 Section::Disk => match key_event.code {
                     KeyCode::Down | KeyCode::Char('j') => {
-                        if let Some(index) = self.distk_state.selected() {
-                            self.distk_state
+                        if let Some(index) = self.disk_state.selected() {
+                            self.disk_state
                                 .select(Some(index.saturating_add(1).min(self.disks.len() - 1)));
                         }
                     }
                     KeyCode::Up | KeyCode::Char('k') => {
-                        if let Some(index) = self.distk_state.selected() {
-                            self.distk_state.select(Some(index.saturating_sub(1)));
+                        if let Some(index) = self.disk_state.selected() {
+                            self.disk_state.select(Some(index.saturating_sub(1)));
                         }
                     }
                     KeyCode::Char('d') => {
-                        if let Some(index) = self.distk_state.selected() {
+                        if let Some(index) = self.disk_state.selected() {
                             self.disks.remove(index);
 
                             if !self.disks.is_empty() {
-                                self.distk_state.select(Some(index.saturating_sub(1)));
+                                self.disk_state.select(Some(index.saturating_sub(1)));
                             } else {
-                                self.distk_state.select(None);
+                                self.disk_state.select(None);
                             }
                         }
                     }
                     KeyCode::Char('n') => {
-                        self.new_disk = Some(DiskBuilder::default());
+                        self.new_disk = Some(DiskBuilder::new());
                     }
                     _ => {}
                 },
                 Section::Network => {}
                 Section::Summary if key_event.code == KeyCode::Enter => {
-                    let vm = self.build();
-                    sender.send(Event::VMCreated(vm))?;
+                    let vm_build_data = self.build();
+                    sender.send(Event::VMCreated(vm_build_data))?;
                 }
                 _ => {}
             },
@@ -1010,10 +1019,10 @@ impl VMBuilder {
                         },
                         Span::from(" ".repeat(6)),
                         Span::from({
-                            let original_length = self.vcpus.field.to_string().len();
+                            let original_length = self.vcpu.field.to_string().len();
                             let target_length = 50;
 
-                            self.vcpus
+                            self.vcpu
                                 .field
                                 .to_string()
                                 .chars()
@@ -1024,7 +1033,7 @@ impl VMBuilder {
                     ]),
                     Line::from(vec![
                         Span::from(" ".repeat(14)),
-                        Span::from(self.vcpus.clone().error.unwrap_or("".to_string())).red(),
+                        Span::from(self.vcpu.clone().error.unwrap_or("".to_string())).red(),
                     ]),
                 ];
 
@@ -1101,7 +1110,7 @@ impl VMBuilder {
                 if self.confirmation.is_none() {
                     match hardware_section {
                         HardwareSection::Cpu => {
-                            let x = area.x + self.vcpus.field.visual_cursor() as u16 + 16;
+                            let x = area.x + self.vcpu.field.visual_cursor() as u16 + 16;
                             let y = area.y + 2;
                             frame.set_cursor_position((x, y));
                         }
@@ -1155,7 +1164,7 @@ impl VMBuilder {
                             horizontal: 2,
                             vertical: 2,
                         }),
-                        &mut self.distk_state,
+                        &mut self.disk_state,
                     );
                 }
                 if let Some(new_disk) = &self.new_disk {
@@ -1228,7 +1237,7 @@ impl VMBuilder {
                         Line::from(vec![
                             Span::from("vCPU          ").bold(),
                             Span::from(" ".repeat(6)),
-                            Span::from(self.vcpus.field.value()),
+                            Span::from(self.vcpu.field.value()),
                         ]),
                         Line::from(""),
                     ]),
