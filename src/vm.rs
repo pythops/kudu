@@ -234,6 +234,18 @@ impl VM {
             .collect()
     }
 
+    pub fn cdroms(&self) -> Vec<Drive> {
+        self.drives
+            .clone()
+            .into_iter()
+            .filter(|drive| {
+                drive.interface == Interface::Virtio
+                    && drive.media == Media::CdRom
+                    && drive.path != self.get_boot_file()
+            })
+            .collect()
+    }
+
     pub fn edit(&mut self, data: VMEditData) -> Result<()> {
         self.vcpu = data.new_vcpu;
         self.memory = data.new_memory;
@@ -243,6 +255,10 @@ impl VM {
                 fs::remove_file(&path)
                     .with_context(|| format!("can not remove {}", path.to_string_lossy()))?;
             }
+            self.drives.retain(|drive| drive.path != path);
+        }
+
+        for path in data.delete_cdroms {
             self.drives.retain(|drive| drive.path != path);
         }
 

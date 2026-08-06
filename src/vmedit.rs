@@ -27,7 +27,14 @@ struct UserInputField {
 #[derive(Debug, Clone, PartialEq)]
 enum Section {
     Hardware(HardwareSection),
-    Storage,
+    Storage(StorageSection),
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+enum StorageSection {
+    #[default]
+    Disk,
+    Cdrom,
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -47,6 +54,8 @@ pub struct EditVM {
     focused_section: Section,
     added_disks: Vec<Disk>,
     deleted_disks: Vec<PathBuf>,
+    deleted_cdroms: Vec<PathBuf>,
+    cdrom_state: TableState,
     vm: VM,
 }
 
@@ -57,6 +66,7 @@ pub struct VMEditData {
     pub added_disks: Vec<Disk>,
     pub new_vcpu: u16,
     pub new_memory: u32,
+    pub delete_cdroms: Vec<PathBuf>,
 }
 
 impl EditVM {
@@ -86,6 +96,8 @@ impl EditVM {
             focused_section: Section::Hardware(HardwareSection::Cpu),
             added_disks: Vec::new(),
             deleted_disks: Vec::new(),
+            deleted_cdroms: Vec::new(),
+            cdrom_state: TableState::default(),
             vm: vm.clone(),
         }
     }
@@ -168,15 +180,16 @@ impl EditVM {
                     added_disks: self.added_disks.clone(),
                     new_vcpu: self.vcpu.field.value().parse::<u16>().unwrap(),
                     new_memory: self.memory.field.value().parse::<u32>().unwrap(),
+                    delete_cdroms: self.deleted_cdroms.clone(),
                 }));
             }
             KeyCode::Tab | KeyCode::BackTab => match self.focused_section {
                 Section::Hardware(_) => {
                     if self.validate_harware_section() {
-                        self.focused_section = Section::Storage;
+                        self.focused_section = Section::Storage(StorageSection::default());
                     }
                 }
-                Section::Storage => {
+                Section::Storage(_) => {
                     self.focused_section = Section::Hardware(HardwareSection::default())
                 }
             },
@@ -209,48 +222,100 @@ impl EditVM {
                         }
                     },
                 },
-                Section::Storage => match key_event.code {
-                    KeyCode::Down | KeyCode::Char('j') => {
-                        if let Some(index) = self.disk_state.selected() {
-                            self.disk_state.select(Some(
-                                index
-                                    .saturating_add(1)
-                                    .min(self.vm.disks().len() + self.added_disks.len() - 1),
-                            ));
-                        }
-                    }
-                    KeyCode::Up | KeyCode::Char('k') => {
-                        if let Some(index) = self.disk_state.selected() {
-                            self.disk_state.select(Some(index.saturating_sub(1)));
-                        }
-                    }
-                    KeyCode::Char('d') => {
-                        if let Some(index) = self.disk_state.selected() {
-                            let vm_disks = self.vm.disks();
-
-                            if index < vm_disks.len() {
-                                let disk = &vm_disks[index];
-                                self.deleted_disks.push(disk.path.clone());
+                Section::Storage(storage_section) => match storage_section {
+                    StorageSection::Disk => match key_event.code {
+                        KeyCode::Down | KeyCode::Up => {
+                            self.focused_section = Section::Storage(StorageSection::Cdrom);
+                            if self.vm.cdroms().is_empty() {
+                                self.cdrom_state = TableState::default()
                             } else {
-                                let index = index.saturating_sub(vm_disks.len());
-                                self.added_disks.remove(index);
+                                self.cdrom_state = TableState::default().with_selected(Some(0));
                             }
+                            self.disk_state = TableState::default();
                         }
-                    }
-                    KeyCode::Char('u') => {
-                        if let Some(index) = self.disk_state.selected() {
-                            let vm_disks = self.vm.disks();
 
-                            if index < vm_disks.len() {
-                                let disk = &vm_disks[index];
-                                self.deleted_disks.retain(|path| &disk.path != path);
+                        KeyCode::Char('j') => {
+                            if let Some(index) = self.disk_state.selected() {
+                                self.disk_state.select(Some(
+                                    index
+                                        .saturating_add(1)
+                                        .min(self.vm.disks().len() + self.added_disks.len() - 1),
+                                ));
                             }
                         }
-                    }
-                    KeyCode::Char('n') => {
-                        self.new_disk = Some(DiskBuilder::new());
-                    }
-                    _ => {}
+                        KeyCode::Char('k') => {
+                            if let Some(index) = self.disk_state.selected() {
+                                self.disk_state.select(Some(index.saturating_sub(1)));
+                            }
+                        }
+                        KeyCode::Char('d') => {
+                            if let Some(index) = self.disk_state.selected() {
+                                let vm_disks = self.vm.disks();
+
+                                if index < vm_disks.len() {
+                                    let disk = &vm_disks[index];
+                                    self.deleted_disks.push(disk.path.clone());
+                                } else {
+                                    let index = index.saturating_sub(vm_disks.len());
+                                    self.added_disks.remove(index);
+                                }
+                            }
+                        }
+                        KeyCode::Char('u') => {
+                            if let Some(index) = self.disk_state.selected() {
+                                let vm_disks = self.vm.disks();
+
+                                if index < vm_disks.len() {
+                                    let disk = &vm_disks[index];
+                                    self.deleted_disks.retain(|path| &disk.path != path);
+                                }
+                            }
+                        }
+                        KeyCode::Char('n') => {
+                            self.new_disk = Some(DiskBuilder::new());
+                        }
+                        _ => {}
+                    },
+
+                    StorageSection::Cdrom => match key_event.code {
+                        KeyCode::Up | KeyCode::Down => {
+                            self.focused_section = Section::Storage(StorageSection::Disk);
+                            if self.vm.disks().is_empty() && self.added_disks.is_empty() {
+                                self.disk_state = TableState::default()
+                            } else {
+                                self.disk_state = TableState::default().with_selected(Some(0));
+                            }
+                            self.cdrom_state = TableState::default();
+                        }
+                        KeyCode::Char('j') => {
+                            if let Some(index) = self.cdrom_state.selected() {
+                                self.cdrom_state.select(Some(
+                                    index.saturating_add(1).min(self.vm.cdroms().len() - 1),
+                                ));
+                            }
+                        }
+                        KeyCode::Char('k') => {
+                            if let Some(index) = self.cdrom_state.selected() {
+                                self.cdrom_state.select(Some(index.saturating_sub(1)));
+                            }
+                        }
+                        KeyCode::Char('d') => {
+                            if let Some(index) = self.cdrom_state.selected() {
+                                let cdroms = self.vm.cdroms();
+
+                                let cdrom = &cdroms[index];
+                                self.deleted_cdroms.push(cdrom.path.clone());
+                            }
+                        }
+                        KeyCode::Char('u') => {
+                            if let Some(index) = self.cdrom_state.selected() {
+                                let cdroms = self.vm.cdroms();
+                                let cdrom = &cdroms[index];
+                                self.deleted_cdroms.retain(|path| &cdrom.path != path);
+                            }
+                        }
+                        _ => {}
+                    },
                 },
             },
         }
@@ -271,7 +336,7 @@ impl EditVM {
                     Span::from("  Hardware  ").fg(Color::DarkGray)
                 }
             }
-            Section::Storage => {
+            Section::Storage(_) => {
                 if is_focused {
                     Span::styled(
                         "    Storage    ",
@@ -288,8 +353,8 @@ impl EditVM {
             Block::default()
                 .title({
                     Line::from(vec![
-                        self.title_span(Section::Hardware(HardwareSection::Cpu)),
-                        self.title_span(Section::Storage),
+                        self.title_span(Section::Hardware(HardwareSection::default())),
+                        self.title_span(Section::Storage(StorageSection::default())),
                     ])
                 })
                 .title_alignment(Alignment::Center)
@@ -313,7 +378,7 @@ impl EditVM {
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(80),
+                Constraint::Length(90),
                 Constraint::Fill(1),
             ])
             .margin(1)
@@ -331,7 +396,7 @@ impl EditVM {
         );
 
         let area = area.inner(Margin {
-            horizontal: 5,
+            horizontal: 3,
             vertical: 2,
         });
 
@@ -419,24 +484,76 @@ impl EditVM {
                 frame.render_widget(Text::from(cpu), cpu_block);
                 frame.render_widget(Text::from(memory), memory_block);
             }
-            Section::Storage => {
+            Section::Storage(storage_section) => {
                 let area = area.inner(Margin {
                     horizontal: 2,
                     vertical: 2,
                 });
 
+                let (disk_area, cdrom_area) = {
+                    let chunks = Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                        .margin(1)
+                        .split(area);
+
+                    (chunks[0], chunks[1])
+                };
+
+                frame.render_widget(
+                    Block::new()
+                        .borders(Borders::TOP)
+                        .border_type({
+                            if storage_section == &StorageSection::Disk {
+                                BorderType::Thick
+                            } else {
+                                BorderType::Plain
+                            }
+                        })
+                        .border_style({
+                            if storage_section == &StorageSection::Disk {
+                                Style::new().yellow()
+                            } else {
+                                Style::default()
+                            }
+                        })
+                        .title(" Disk ")
+                        .title_alignment(Alignment::Center),
+                    disk_area,
+                );
+
+                frame.render_widget(
+                    Block::new()
+                        .borders(Borders::TOP)
+                        .border_type({
+                            if storage_section == &StorageSection::Cdrom {
+                                BorderType::Thick
+                            } else {
+                                BorderType::Plain
+                            }
+                        })
+                        .border_style({
+                            if storage_section == &StorageSection::Cdrom {
+                                Style::new().yellow()
+                            } else {
+                                Style::default()
+                            }
+                        })
+                        .title(" Cdrom ")
+                        .title_alignment(Alignment::Center),
+                    cdrom_area,
+                );
+
                 // disks
                 let widths = [
                     Constraint::Length(5),
-                    Constraint::Length(5),
-                    Constraint::Length(15),
-                    Constraint::Length(15),
+                    Constraint::Length(10),
+                    Constraint::Length(10),
                 ];
 
                 let vm_disks = self.vm.disks();
-                let vm_disks_len = vm_disks.len();
-                let vm_disks = vm_disks.iter().enumerate().map(|(index, drive)| {
-                    let size = drive.size().unwrap_or(0);
+                let vm_disks = vm_disks.iter().map(|drive| {
+                    let size = drive.size.unwrap();
                     let to_delete = self.deleted_disks.contains(&drive.path);
                     Row::new(vec![
                         {
@@ -446,7 +563,6 @@ impl EditVM {
                                 String::new()
                             }
                         },
-                        index.to_string(),
                         drive.format.to_string(),
                         format!("{} GiB", size),
                     ])
@@ -457,11 +573,9 @@ impl EditVM {
                     })
                 });
 
-                let new_disks = self.added_disks.iter().enumerate().map(|(index, disk)| {
-                    let i = index + vm_disks_len;
+                let new_disks = self.added_disks.iter().map(|disk| {
                     Row::new(vec![
                         "New".to_string(),
-                        i.to_string(),
                         disk.format.to_string(),
                         format!("{} GiB", disk.size),
                     ])
@@ -482,7 +596,56 @@ impl EditVM {
                     .row_highlight_style(Style::new().on_dark_gray())
                     .column_spacing(1);
 
-                frame.render_stateful_widget(disks, area, &mut self.disk_state);
+                frame.render_stateful_widget(
+                    disks,
+                    disk_area.inner(Margin {
+                        horizontal: 0,
+                        vertical: 2,
+                    }),
+                    &mut self.disk_state,
+                );
+
+                // Cdrom
+                let widths = [Constraint::Length(5), Constraint::Length(40)];
+
+                let cdroms = self.vm.cdroms();
+                let cdroms = cdroms.iter().map(|drive| {
+                    let to_delete = self.deleted_cdroms.contains(&drive.path);
+                    Row::new(vec![
+                        {
+                            if to_delete {
+                                "Del".to_string()
+                            } else {
+                                String::new()
+                            }
+                        },
+                        drive
+                            .path
+                            .file_name()
+                            .unwrap()
+                            .to_string_lossy()
+                            .to_string(),
+                    ])
+                    .style(if to_delete {
+                        Style::new().red()
+                    } else {
+                        Style::default()
+                    })
+                });
+
+                let cdroms = Table::new(cdroms, widths)
+                    .flex(ratatui::layout::Flex::SpaceBetween)
+                    .row_highlight_style(Style::new().on_dark_gray())
+                    .column_spacing(1);
+
+                frame.render_stateful_widget(
+                    cdroms,
+                    cdrom_area.inner(Margin {
+                        horizontal: 0,
+                        vertical: 2,
+                    }),
+                    &mut self.cdrom_state,
+                );
 
                 if let Some(new_disk) = &self.new_disk {
                     new_disk.render(frame);
