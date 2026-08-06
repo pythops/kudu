@@ -32,13 +32,13 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App, sender: Sender<Even
         }
 
         FocusedSection::EditVM => {
-            if let KeyCode::Esc = key_event.code {
-                app.focused_section = FocusedSection::Main;
-                app.edit_vm = None;
-                return Ok(());
-            }
             if let Some(edit_vm) = &mut app.edit_vm {
-                edit_vm.handle_key_events(key_event, sender)?;
+                if edit_vm.new_disk.is_none() && key_event.code == KeyCode::Esc {
+                    app.focused_section = FocusedSection::Main;
+                    app.edit_vm = None;
+                } else {
+                    edit_vm.handle_key_events(key_event, sender)?;
+                }
             }
         }
 

@@ -50,7 +50,7 @@ pub struct EditVM {
     vcpu: UserInputField,
     memory: UserInputField,
     disk_state: TableState,
-    new_disk: Option<DiskBuilder>,
+    pub new_disk: Option<DiskBuilder>,
     focused_section: Section,
     added_disks: Vec<Disk>,
     deleted_disks: Vec<PathBuf>,
