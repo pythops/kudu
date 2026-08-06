@@ -53,8 +53,12 @@ impl Drive {
 
         args.push(format!("format={}", self.format));
 
-        if self.read_only || self.media == Media::CdRom {
+        if self.read_only {
             args.push("readonly=on".to_string());
+        }
+
+        if self.media == Media::CdRom {
+            args.push("media=cdrom".to_string());
         }
 
         if let Some(unit) = self.unit {
