@@ -80,7 +80,10 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App, sender: Sender<Even
             }
 
             KeyCode::Char('d') => {
-                if app.vm_list_state.selected().is_some() {
+                if let Some(index) = app.vm_list_state.selected()
+                    && let Some(vm) = app.vms.get(index)
+                    && vm.state == RunState::shutdown
+                {
                     app.focused_section = FocusedSection::DeleteConfirmation;
                     app.delete_confirmation = Some(DeleteConfirmation::default());
                 }
