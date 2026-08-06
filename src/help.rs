@@ -97,11 +97,23 @@ impl Help {
                     Span::from("l,→").bold(),
                     Span::from("  Right"),
                     Span::from(" | "),
+                    Span::from("n").bold(),
+                    Span::from("  New Disk"),
+                    Span::from(" | "),
+                    Span::from("d").bold(),
+                    Span::from("  Delete"),
+                    Span::from(" | "),
+                    Span::from("u").bold(),
+                    Span::from("  Undo"),
+                    Span::from(" | "),
                     Span::from("Esc").bold(),
                     Span::from(" Cancel"),
                     Span::from(" | "),
                     Span::from("Enter").bold(),
                     Span::from(" Confirm"),
+                    Span::from(" | "),
+                    Span::from("⇄").bold(),
+                    Span::from(" Nav"),
                 ])]
             }
         };
