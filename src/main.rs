@@ -13,6 +13,7 @@ use kudu::{
     notification::NotificationLevel,
     qemu::Qemu,
     tui::Tui,
+    vm::VM,
     vmbuilder::VMBuilder,
 };
 use qapi::qmp::RunState;
@@ -71,17 +72,35 @@ fn main() -> Result<()> {
                 }
             }
 
-            Event::VMCreated(mut vm) => {
-                if let Err(error) = vm.create() {
-                    let notif =
-                        kudu::notification::Notification::new(error, NotificationLevel::Error);
-                    let _ = tui.events.sender.send(Notification(notif));
+            Event::VMCreated(data) => {
+                match VM::create(data) {
+                    Ok(vm) => {
+                        app.vms.push(vm);
+                        if app.vm_list_state.selected().is_none() {
+                            app.vm_list_state.select(Some(0));
+                        }
+                    }
+                    Err(error) => {
+                        let notif =
+                            kudu::notification::Notification::new(error, NotificationLevel::Error);
+                        let _ = tui.events.sender.send(Notification(notif));
+                    }
                 }
+
                 app.focused_section = FocusedSection::Main;
                 app.new_vm = None;
-                app.vms.push(vm);
-                if app.vm_list_state.selected().is_none() {
-                    app.vm_list_state.select(Some(0));
+            }
+
+            Event::VMEdited(data) => {
+                if let Some(vm) = app.vms.iter_mut().find(|vm| vm.id == data.id) {
+                    if let Err(error) = vm.edit(data) {
+                        let notif =
+                            kudu::notification::Notification::new(error, NotificationLevel::Error);
+
+                        let _ = tui.events.sender.send(Notification(notif));
+                    }
+                    app.edit_vm = None;
+                    app.focused_section = FocusedSection::Main;
                 }
             }
 
@@ -93,6 +112,10 @@ fn main() -> Result<()> {
                             vm.events.pop();
                             vm.events
                                 .push(format!("{} - Downloading cloud image {}%", date, progress));
+
+                            if progress == 100 {
+                                let _ = vm.start(tui.events.sender.clone());
+                            }
                         }
                         DownloadEvent::Error(error) => {
                             vm.events.push(format!("{} - Error - {}%", date, error));

@@ -1213,7 +1213,6 @@ dependencies = [
  "serde",
  "serde_json",
  "strum",
- "strum_macros",
  "tui-input",
  "uuid",
  "which",

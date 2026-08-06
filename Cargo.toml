@@ -21,7 +21,6 @@ clap = { version = "4", features = ["derive", "cargo"] }
 anyhow = "1"
 chrono = "0.4"
 strum = { version = "0.28", features = ["derive"] }
-strum_macros = "0.28"
 uuid = { version = "1", features = ["v4", "serde"] }
 libc = "0.2"
 reqwest = { version = "0.13.4", features = ["blocking", "stream"] }

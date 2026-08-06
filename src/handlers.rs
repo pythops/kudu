@@ -1,12 +1,15 @@
-use std::{cmp::min, sync::mpsc::Sender};
+use std::{cmp::min, fs::File, io::Write, sync::mpsc::Sender};
 
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use qapi::qmp::RunState;
 
 use crate::{
     app::{App, FocusedSection},
     confirmation::delete::DeleteConfirmation,
     event::Event::{self, NewVM},
+    notification::{Notification, NotificationLevel},
+    vmedit::EditVM,
 };
 
 pub fn handle_key_events(key_event: KeyEvent, app: &mut App, sender: Sender<Event>) -> Result<()> {
@@ -25,6 +28,17 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App, sender: Sender<Even
             }
             if let Some(delete_confirmation) = &mut app.delete_confirmation {
                 delete_confirmation.handle_key_events(key_event, sender)?;
+            }
+        }
+
+        FocusedSection::EditVM => {
+            if let Some(edit_vm) = &mut app.edit_vm {
+                if edit_vm.new_disk.is_none() && key_event.code == KeyCode::Esc {
+                    app.focused_section = FocusedSection::Main;
+                    app.edit_vm = None;
+                } else {
+                    edit_vm.handle_key_events(key_event, sender)?;
+                }
             }
         }
 
@@ -66,9 +80,42 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App, sender: Sender<Even
             }
 
             KeyCode::Char('d') => {
-                if app.vm_list_state.selected().is_some() {
+                if let Some(index) = app.vm_list_state.selected()
+                    && let Some(vm) = app.vms.get(index)
+                    && vm.state == RunState::shutdown
+                {
                     app.focused_section = FocusedSection::DeleteConfirmation;
                     app.delete_confirmation = Some(DeleteConfirmation::default());
+                }
+            }
+            KeyCode::Char('e') => {
+                if let Some(index) = app.vm_list_state.selected()
+                    && let Some(vm) = app.vms.get(index)
+                {
+                    if vm.state == RunState::shutdown {
+                        app.focused_section = FocusedSection::EditVM;
+                        app.edit_vm = Some(EditVM::new(vm));
+                    } else {
+                        let notif = Notification::new(
+                            "VM should be shutdown before edit",
+                            NotificationLevel::Info,
+                        );
+
+                        let _ = sender.send(Event::Notification(notif));
+                    }
+                }
+            }
+
+            KeyCode::Char('v') => {
+                if let Some(index) = app.vm_list_state.selected()
+                    && let Some(vm) = app.vms.get(index)
+                {
+                    let filename = "debug.txt";
+                    let mut file = File::options().append(true).create(true).open(filename)?;
+                    for drive in &vm.drives {
+                        let arg = drive.to_qemu_arg();
+                        writeln!(&mut file, "{arg}")?;
+                    }
                 }
             }
 

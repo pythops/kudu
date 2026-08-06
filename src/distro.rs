@@ -22,7 +22,7 @@ use crate::{
     get_kudu_data_dir,
 };
 
-#[derive(Debug, Clone, PartialEq, Copy, strum_macros::Display, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Copy, strum::Display, Deserialize, Serialize)]
 #[non_exhaustive]
 pub enum LinuxDistro {
     #[strum(to_string = "Arch Linux (btw)")]

@@ -12,9 +12,9 @@ use std::{
     thread::{self},
 };
 
-use crate::{Arch, BootOption, KVM_ENABLED, distro::LinuxDistro::TempleOS, event::Event, vm::VM};
+use crate::{Arch, KVM_ENABLED, event::Event, vm::VM};
 
-#[derive(Debug, Default, Clone, Copy, strum_macros::Display, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Copy, strum::Display, Deserialize, Serialize)]
 pub enum Network {
     #[default]
     User,
@@ -79,35 +79,6 @@ impl Qemu {
             }
         };
 
-        for disk in &vm.disks {
-            command.arg("-drive").arg(format!(
-                "file={},format={},if=virtio",
-                disk.path.to_string_lossy(),
-                disk.format.to_string().to_lowercase()
-            ));
-        }
-
-        if let Some((uefi_code, uefi_vars)) = &vm.uefi {
-            command
-                .arg("-drive")
-                .arg(format!(
-                    "if=pflash,format=raw,unit=0,readonly=on,file={}",
-                    uefi_code.to_string_lossy()
-                ))
-                .arg("-drive")
-                .arg(format!(
-                    "if=pflash,format=raw,unit=1,file={}",
-                    uefi_vars.to_string_lossy()
-                ));
-        }
-
-        if let Some(cloudinit) = &vm.cloudinit {
-            command.arg("-drive").arg(format!(
-                "file={},format=raw,readonly=on,if=virtio",
-                cloudinit.to_string_lossy()
-            ));
-        }
-
         if let Ok(host_arch) = Arch::try_from(std::env::consts::ARCH)
             && host_arch == vm.arch
             && unsafe { KVM_ENABLED }
@@ -118,7 +89,7 @@ impl Qemu {
         command
             .arg("-daemonize")
             .arg("-vnc")
-            .arg("127.0.0.1:0")
+            .arg("127.0.0.1:0,to=99")
             .arg("-qmp")
             .arg(format!(
                 "unix:{},server,wait=off",
@@ -132,30 +103,12 @@ impl Qemu {
             .arg("-m")
             .arg(vm.memory.to_string())
             .arg("-smp")
-            .arg(vm.vcpus.to_string())
+            .arg(vm.vcpu.to_string())
             .arg("-boot")
             .arg("order=d");
 
-        match vm.boot_option {
-            BootOption::CloudImage => {
-                if Some(TempleOS) == vm.distro {
-                    command.arg("-drive").arg(format!(
-                        "file={},media=cdrom,if=ide",
-                        vm.get_boot_file().to_string_lossy()
-                    ));
-                } else {
-                    command.arg("-drive").arg(format!(
-                        "file={},if=virtio",
-                        vm.get_boot_file().to_string_lossy()
-                    ));
-                }
-            }
-            BootOption::LocalFile => {
-                command.arg("-drive").arg(format!(
-                    "file={},media=cdrom",
-                    vm.get_boot_file().to_string_lossy()
-                ));
-            }
+        for drive in &vm.drives {
+            command.arg("-drive").arg(drive.to_qemu_arg());
         }
 
         command.stdout(Stdio::null());
