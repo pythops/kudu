@@ -8,6 +8,7 @@ use std::{
     fs::{self, File},
     io::Write,
     path::PathBuf,
+    process::{Command, Stdio},
     sync::{Arc, atomic::AtomicBool, mpsc::Sender},
     thread::{self},
 };
@@ -102,6 +103,28 @@ impl VM {
             }
         }
         Ok(vms)
+    }
+
+    pub fn preview(&self) {
+        if let Some(vnc) = &self.vnc {
+            thread::spawn({
+                let vnc = vnc.clone();
+                move || {
+                    if let Ok(mut child) = Command::new("vncviewer")
+                        .arg(format!(
+                            "{}:{}",
+                            vnc.host.clone().unwrap(),
+                            vnc.service.clone().unwrap()
+                        ))
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
+                        .spawn()
+                    {
+                        let _ = child.wait();
+                    }
+                }
+            });
+        }
     }
 
     pub fn create(data: VMBuildData) -> Result<VM> {

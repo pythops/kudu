@@ -28,7 +28,7 @@ impl<B: Backend> Tui<B> {
         ratatui::crossterm::execute!(
             io::stdout(),
             EnterAlternateScreen,
-            SetCursorStyle::BlinkingBar
+            SetCursorStyle::BlinkingBlock
         )?;
 
         let panic_hook = panic::take_hook();

@@ -1,4 +1,4 @@
-use std::{cmp::min, fs::File, io::Write, sync::mpsc::Sender};
+use std::{cmp::min, sync::mpsc::Sender};
 
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -106,16 +106,12 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App, sender: Sender<Even
                 }
             }
 
-            KeyCode::Char('v') => {
+            KeyCode::Char('p') => {
                 if let Some(index) = app.vm_list_state.selected()
                     && let Some(vm) = app.vms.get(index)
+                    && vm.vnc.is_some()
                 {
-                    let filename = "debug.txt";
-                    let mut file = File::options().append(true).create(true).open(filename)?;
-                    for drive in &vm.drives {
-                        let arg = drive.to_qemu_arg();
-                        writeln!(&mut file, "{arg}")?;
-                    }
+                    vm.preview();
                 }
             }
 

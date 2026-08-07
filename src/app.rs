@@ -212,7 +212,7 @@ impl App {
         let (left, right) = {
             let chunks = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([Constraint::Length(30), Constraint::Length(50)])
+                .constraints([Constraint::Length(40), Constraint::Length(50)])
                 .flex(ratatui::layout::Flex::SpaceAround)
                 .split(block);
             (chunks[0], chunks[1])
