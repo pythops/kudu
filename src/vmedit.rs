@@ -329,21 +329,21 @@ impl EditVM {
             Section::Hardware(_) => {
                 if is_focused {
                     Span::styled(
-                        "  Hardware  ",
+                        "  Hardware    ",
                         Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
                     )
                 } else {
-                    Span::from("  Hardware  ").fg(Color::DarkGray)
+                    Span::from("  Hardware    ").fg(Color::DarkGray)
                 }
             }
             Section::Storage(_) => {
                 if is_focused {
                     Span::styled(
-                        "    Storage    ",
+                        "   Storage 󱛟   ",
                         Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
                     )
                 } else {
-                    Span::from("    Storage    ").fg(Color::DarkGray)
+                    Span::from("   Storage 󱛟   ").fg(Color::DarkGray)
                 }
             }
         }
@@ -388,7 +388,7 @@ impl EditVM {
         frame.render_widget(
             Block::default()
                 .borders(Borders::ALL)
-                .title(" Edit VM ")
+                .title(" Edit VM 󰏖  ")
                 .title_alignment(Alignment::Center)
                 .border_type(BorderType::Thick)
                 .border_style(Style::default().yellow()),

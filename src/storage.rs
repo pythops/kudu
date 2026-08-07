@@ -255,7 +255,7 @@ impl DiskBuilder {
                         Span::from("  Size  ")
                     }
                 },
-                Span::from(" ".repeat(6)),
+                Span::from(" ".repeat(8)),
                 Span::from({
                     let original_length = self.size.field.to_string().len();
                     let target_length = 30;
@@ -271,7 +271,7 @@ impl DiskBuilder {
                 Span::from(" GiB"),
             ]),
             Line::from(vec![
-                Span::from(" ".repeat(14)),
+                Span::from(" ".repeat(16)),
                 Span::from(self.size.clone().error.unwrap_or("".to_string())).red(),
             ]),
         ];

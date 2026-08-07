@@ -220,7 +220,7 @@ impl App {
 
         let left_infos = vec![
             Line::from(vec![
-                Span::from("CPUs  "),
+                Span::from("CPU   "),
                 Span::from("  "),
                 Span::from(thread::available_parallelism().unwrap().to_string()),
             ]),

@@ -35,7 +35,7 @@ struct UserInputField {
 pub enum Section {
     Distro(DistroSection),
     Hardware(HardwareSection),
-    Disk,
+    Storage,
     Network,
     Summary,
 }
@@ -309,10 +309,10 @@ impl VMBuilder {
                 }
                 Section::Hardware(_) => {
                     if self.validate_harware_section() {
-                        self.focused_section = Section::Disk;
+                        self.focused_section = Section::Storage;
                     }
                 }
-                Section::Disk => self.focused_section = Section::Network,
+                Section::Storage => self.focused_section = Section::Network,
                 Section::Network => self.focused_section = Section::Summary,
                 Section::Summary => {
                     self.focused_section = Section::Distro(DistroSection::default())
@@ -329,10 +329,10 @@ impl VMBuilder {
                         self.focused_section = Section::Distro(DistroSection::default());
                     }
                 }
-                Section::Disk => {
+                Section::Storage => {
                     self.focused_section = Section::Hardware(HardwareSection::default())
                 }
-                Section::Network => self.focused_section = Section::Disk,
+                Section::Network => self.focused_section = Section::Storage,
                 Section::Summary => self.focused_section = Section::Network,
             },
             _ => match &self.focused_section {
@@ -608,7 +608,7 @@ impl VMBuilder {
                         }
                     }
                 },
-                Section::Disk => match key_event.code {
+                Section::Storage => match key_event.code {
                     KeyCode::Down | KeyCode::Char('j') => {
                         if let Some(index) = self.disk_state.selected() {
                             self.disk_state
@@ -654,51 +654,51 @@ impl VMBuilder {
             Section::Distro(_) => {
                 if is_focused {
                     Span::styled(
-                        "   Distro   ",
+                        "   Distro     ",
                         Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
                     )
                 } else {
-                    Span::from("   Distro   ").fg(Color::DarkGray)
+                    Span::from("   Distro     ").fg(Color::DarkGray)
                 }
             }
             Section::Hardware(_) => {
                 if is_focused {
                     Span::styled(
-                        "  Hardware  ",
+                        "  Hardware    ",
                         Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
                     )
                 } else {
-                    Span::from("  Hardware  ").fg(Color::DarkGray)
+                    Span::from("  Hardware    ").fg(Color::DarkGray)
                 }
             }
-            Section::Disk => {
+            Section::Storage => {
                 if is_focused {
                     Span::styled(
-                        "    Disk    ",
+                        "   Storage 󱛟   ",
                         Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
                     )
                 } else {
-                    Span::from("    Disk    ").fg(Color::DarkGray)
+                    Span::from("   Storage 󱛟   ").fg(Color::DarkGray)
                 }
             }
             Section::Network => {
                 if is_focused {
                     Span::styled(
-                        "  Network   ",
+                        "  Network 󰛳    ",
                         Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
                     )
                 } else {
-                    Span::from("  Network   ").fg(Color::DarkGray)
+                    Span::from("  Network 󰛳    ").fg(Color::DarkGray)
                 }
             }
             Section::Summary => {
                 if is_focused {
                     Span::styled(
-                        "  Summary   ",
+                        "  Summary  󱇗   ",
                         Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
                     )
                 } else {
-                    Span::from("  Summary   ").fg(Color::DarkGray)
+                    Span::from("  Summary  󱇗   ").fg(Color::DarkGray)
                 }
             }
         }
@@ -710,7 +710,7 @@ impl VMBuilder {
                     Line::from(vec![
                         self.title_span(Section::Distro(DistroSection::Name)),
                         self.title_span(Section::Hardware(HardwareSection::Cpu)),
-                        self.title_span(Section::Disk),
+                        self.title_span(Section::Storage),
                         self.title_span(Section::Network),
                         self.title_span(Section::Summary),
                     ])
@@ -1127,7 +1127,7 @@ impl VMBuilder {
                 }
             }
 
-            Section::Disk => {
+            Section::Storage => {
                 if self.disks.is_empty() {
                     let message = Text::from("Press n to add additional disks").centered();
                     frame.render_widget(

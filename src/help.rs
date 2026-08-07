@@ -108,7 +108,7 @@ impl Help {
                     ])]
                 } else {
                     match vm_builder.focused_section {
-                        vmbuilder::Section::Disk => {
+                        vmbuilder::Section::Storage => {
                             if vm_builder.new_disk.is_some() {
                                 vec![Line::from(vec![
                                     Span::from("↑").bold(),
