@@ -428,7 +428,7 @@ impl App {
             edit_vm.render(frame);
         }
 
-        self.help.render(frame, &self.focused_section, help_block);
+        self.help.render(frame, self, help_block);
     }
 
     pub fn tick(&mut self) {

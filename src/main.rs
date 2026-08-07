@@ -67,7 +67,7 @@ fn main() -> Result<()> {
                     app.new_vm = None;
                 } else {
                     if let Some(vmbuilder) = &mut app.new_vm {
-                        vmbuilder.confirmation = None;
+                        vmbuilder.cancel_confirmation = None;
                     }
                 }
             }

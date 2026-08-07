@@ -25,20 +25,20 @@ struct UserInputField {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum Section {
+pub enum Section {
     Hardware(HardwareSection),
     Storage(StorageSection),
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
-enum StorageSection {
+pub enum StorageSection {
     #[default]
     Disk,
     Cdrom,
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-enum HardwareSection {
+pub enum HardwareSection {
     #[default]
     Cpu,
     Memory,
@@ -51,7 +51,7 @@ pub struct EditVM {
     memory: UserInputField,
     disk_state: TableState,
     pub new_disk: Option<DiskBuilder>,
-    focused_section: Section,
+    pub focused_section: Section,
     added_disks: Vec<Disk>,
     deleted_disks: Vec<PathBuf>,
     deleted_cdroms: Vec<PathBuf>,
@@ -435,13 +435,16 @@ impl EditVM {
                         Span::from(" ".repeat(6)),
                         Span::from({
                             let original_length = self.vcpu.field.to_string().len();
-                            let target_length = 50;
+                            let target_length = 60_usize;
 
                             self.vcpu
                                 .field
                                 .to_string()
                                 .chars()
-                                .chain(std::iter::repeat_n(' ', target_length - original_length))
+                                .chain(std::iter::repeat_n(
+                                    ' ',
+                                    target_length.saturating_sub(original_length),
+                                ))
                                 .collect::<String>()
                         })
                         .on_dark_gray(),
@@ -464,13 +467,16 @@ impl EditVM {
                         Span::from(" ".repeat(6)),
                         Span::from({
                             let original_length = self.memory.field.to_string().len();
-                            let target_length = 47;
+                            let target_length = 60_usize;
 
                             self.memory
                                 .field
                                 .to_string()
                                 .chars()
-                                .chain(std::iter::repeat_n(' ', target_length - original_length))
+                                .chain(std::iter::repeat_n(
+                                    ' ',
+                                    target_length.saturating_sub(original_length),
+                                ))
                                 .collect::<String>()
                         })
                         .on_dark_gray(),

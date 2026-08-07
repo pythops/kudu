@@ -32,7 +32,7 @@ struct UserInputField {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum Section {
+pub enum Section {
     Distro(DistroSection),
     Hardware(HardwareSection),
     Disk,
@@ -41,7 +41,7 @@ enum Section {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-enum DistroSection {
+pub enum DistroSection {
     #[default]
     Name,
     BootOption,
@@ -52,7 +52,7 @@ enum DistroSection {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-enum HardwareSection {
+pub enum HardwareSection {
     #[default]
     Cpu,
     Arch,
@@ -62,7 +62,7 @@ enum HardwareSection {
 
 #[derive(Debug, Clone)]
 pub struct VMBuilder {
-    focused_section: Section,
+    pub focused_section: Section,
     boot_option: BootOption,
     arch: Arch,
     name: UserInputField,
@@ -72,13 +72,13 @@ pub struct VMBuilder {
     vcpu: UserInputField,
     memory: UserInputField,
     network: Network,
-    pub confirmation: Option<CancelConfirmation>,
+    pub cancel_confirmation: Option<CancelConfirmation>,
     enable_uefi: bool,
     ubuntu_release: UbuntuRelease,
     debian_release: DebianRelease,
     disks: Vec<Disk>,
     disk_state: TableState,
-    new_disk: Option<DiskBuilder>,
+    pub new_disk: Option<DiskBuilder>,
 }
 
 impl Default for VMBuilder {
@@ -130,7 +130,7 @@ impl VMBuilder {
                 error: None,
             },
             network: Network::default(),
-            confirmation: None,
+            cancel_confirmation: None,
             enable_uefi: true,
             ubuntu_release: UbuntuRelease::default(),
             debian_release: DebianRelease::default(),
@@ -260,12 +260,12 @@ impl VMBuilder {
     }
 
     pub fn handle_key_events(&mut self, key_event: KeyEvent, sender: Sender<Event>) -> Result<()> {
-        if self.confirmation.is_some() && key_event.code == KeyCode::Esc {
-            self.confirmation = None;
+        if self.cancel_confirmation.is_some() && key_event.code == KeyCode::Esc {
+            self.cancel_confirmation = None;
             return Ok(());
         }
 
-        if let Some(confirmation) = &mut self.confirmation {
+        if let Some(confirmation) = &mut self.cancel_confirmation {
             confirmation.handle_key_events(key_event, sender)?;
             return Ok(());
         }
@@ -296,7 +296,7 @@ impl VMBuilder {
         }
 
         if key_event.code == KeyCode::Esc {
-            self.confirmation = Some(CancelConfirmation::default());
+            self.cancel_confirmation = Some(CancelConfirmation::default());
             return Ok(());
         }
 
@@ -726,7 +726,7 @@ impl VMBuilder {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Percentage(80),
+                Constraint::Length(35),
                 Constraint::Fill(1),
             ])
             .margin(1)
@@ -736,7 +736,7 @@ impl VMBuilder {
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(80),
+                Constraint::Length(100),
                 Constraint::Fill(1),
             ])
             .margin(1)
@@ -749,11 +749,13 @@ impl VMBuilder {
                 .title(" New VM 󰏖  ")
                 .title_alignment(ratatui::layout::HorizontalAlignment::Center)
                 .borders(Borders::all())
-                .border_type(if self.confirmation.is_some() | self.new_disk.is_some() {
-                    BorderType::default()
-                } else {
-                    BorderType::Thick
-                })
+                .border_type(
+                    if self.cancel_confirmation.is_some() | self.new_disk.is_some() {
+                        BorderType::default()
+                    } else {
+                        BorderType::Thick
+                    },
+                )
                 .border_style(Style::default().yellow()),
             area,
         );
@@ -797,21 +799,24 @@ impl VMBuilder {
                     Line::from(vec![
                         {
                             if distro_section == &DistroSection::Name {
-                                Span::from("> Name  ").bold()
+                                Span::from("> Name   ").bold()
                             } else {
-                                Span::from("  Name  ")
+                                Span::from("  Name   ")
                             }
                         },
-                        Span::from(" ".repeat(6)),
+                        Span::from(" ".repeat(5)),
                         Span::from({
                             let original_length = self.name.field.to_string().len();
-                            let target_length = 50;
+                            let target_length = 65_usize;
 
                             self.name
                                 .field
                                 .to_string()
                                 .chars()
-                                .chain(std::iter::repeat_n(' ', target_length - original_length))
+                                .chain(std::iter::repeat_n(
+                                    ' ',
+                                    target_length.saturating_sub(original_length),
+                                ))
                                 .collect::<String>()
                         })
                         .on_dark_gray(),
@@ -825,12 +830,12 @@ impl VMBuilder {
                 let boot_option = Line::from(vec![
                     {
                         if distro_section == &DistroSection::BootOption {
-                            Span::from("> Boot  ").bold()
+                            Span::from("> Boot   ").bold()
                         } else {
-                            Span::from("  Boot  ")
+                            Span::from("  Boot   ")
                         }
                     },
-                    Span::from(" ".repeat(6)),
+                    Span::from(" ".repeat(5)),
                     Span::from({
                         if self.boot_option == BootOption::CloudImage {
                             "[x] CloudImage        [ ] Local File"
@@ -843,12 +848,12 @@ impl VMBuilder {
                 let os = Line::from(vec![
                     {
                         if distro_section == &DistroSection::OS {
-                            Span::from("> OS    ").bold()
+                            Span::from("> OS     ").bold()
                         } else {
-                            Span::from("  OS    ")
+                            Span::from("  OS     ")
                         }
                     },
-                    Span::from(" ".repeat(6)),
+                    Span::from(" ".repeat(5)),
                     Span::from(format!("< {} >", self.distro)),
                 ]);
 
@@ -860,7 +865,7 @@ impl VMBuilder {
                             Span::from("  Release")
                         }
                     },
-                    Span::from(" ".repeat(6)),
+                    Span::from(" ".repeat(5)),
                     Span::from({
                         match self.distro {
                             LinuxDistro::Ubuntu(_) => format!(
@@ -883,16 +888,15 @@ impl VMBuilder {
                     Line::from(vec![
                         {
                             if distro_section == &DistroSection::LocalFile {
-                                Span::from("> File Path ").bold()
+                                Span::from("> File Path  ").bold()
                             } else {
-                                Span::from("  File Path ")
+                                Span::from("  File Path  ")
                             }
                         },
                         Span::from(" ".repeat(2)),
                         Span::from({
-                            let original_length: u32 =
-                                self.local_file.field.to_string().len() as u32;
-                            let target_length = 50_u32;
+                            let original_length = self.local_file.field.to_string().len();
+                            let target_length = 65_usize;
 
                             self.local_file
                                 .field
@@ -900,10 +904,7 @@ impl VMBuilder {
                                 .chars()
                                 .chain(std::iter::repeat_n(
                                     ' ',
-                                    target_length
-                                        .saturating_sub(original_length)
-                                        .try_into()
-                                        .unwrap(),
+                                    target_length.saturating_sub(original_length),
                                 ))
                                 .collect::<String>()
                         })
@@ -919,16 +920,15 @@ impl VMBuilder {
                     Line::from(vec![
                         {
                             if distro_section == &DistroSection::Cloudinit {
-                                Span::from("> Cloudinit ").bold()
+                                Span::from("> Cloudinit  ").bold()
                             } else {
-                                Span::from("  Cloudinit ")
+                                Span::from("  Cloudinit  ")
                             }
                         },
-                        Span::from(" ".repeat(2)),
+                        Span::from(" "),
                         Span::from({
-                            let original_length: u32 =
-                                self.cloudinit.field.to_string().len() as u32;
-                            let target_length = 50_u32;
+                            let original_length = self.cloudinit.field.to_string().len();
+                            let target_length = 65_usize;
 
                             self.cloudinit
                                 .field
@@ -936,10 +936,7 @@ impl VMBuilder {
                                 .chars()
                                 .chain(std::iter::repeat_n(
                                     ' ',
-                                    target_length
-                                        .saturating_sub(original_length)
-                                        .try_into()
-                                        .unwrap(),
+                                    target_length.saturating_sub(original_length),
                                 ))
                                 .collect::<String>()
                         })
@@ -948,12 +945,12 @@ impl VMBuilder {
                     Line::from(vec![
                         {
                             if distro_section == &DistroSection::Cloudinit {
-                                Span::from("  File Path").bold()
+                                Span::from("  File Path ").bold()
                             } else {
-                                Span::from("  File Path")
+                                Span::from("  File Path ")
                             }
                         },
-                        Span::from(" ".repeat(3)),
+                        Span::from(" ".repeat(2)),
                         Span::from(self.cloudinit.clone().error.unwrap_or("".to_string())).red(),
                     ]),
                 ];
@@ -972,19 +969,19 @@ impl VMBuilder {
                 frame.render_widget(Text::from(cloudinit), cloudinit_block);
 
                 // FIX: cursor shows on the confirmation popup
-                if self.confirmation.is_none() {
+                if self.cancel_confirmation.is_none() {
                     match distro_section {
-                        DistroSection::Name => {
+                        DistroSection::Name if self.name.field.visual_cursor() < 65 => {
                             let x = area.x + self.name.field.visual_cursor() as u16 + 16;
                             let y = area.y + 2;
                             frame.set_cursor_position((x, y));
                         }
-                        DistroSection::LocalFile => {
+                        DistroSection::LocalFile if self.local_file.field.visual_cursor() <= 50 => {
                             let x = area.x + self.local_file.field.visual_cursor() as u16 + 16;
                             let y = area.y + 10;
                             frame.set_cursor_position((x, y));
                         }
-                        DistroSection::Cloudinit => {
+                        DistroSection::Cloudinit if self.cloudinit.field.visual_cursor() <= 50 => {
                             let x = area.x + self.cloudinit.field.visual_cursor() as u16 + 16;
                             let y = area.y + 18;
                             frame.set_cursor_position((x, y));
@@ -1012,21 +1009,24 @@ impl VMBuilder {
                     Line::from(vec![
                         {
                             if hardware_section == &HardwareSection::Cpu {
-                                Span::from("> CPU   ").bold()
+                                Span::from("> vCPU  ").bold()
                             } else {
-                                Span::from("  CPU   ")
+                                Span::from("  vCPU  ")
                             }
                         },
                         Span::from(" ".repeat(6)),
                         Span::from({
                             let original_length = self.vcpu.field.to_string().len();
-                            let target_length = 50;
+                            let target_length = 65_usize;
 
                             self.vcpu
                                 .field
                                 .to_string()
                                 .chars()
-                                .chain(std::iter::repeat_n(' ', target_length - original_length))
+                                .chain(std::iter::repeat_n(
+                                    ' ',
+                                    target_length.saturating_sub(original_length),
+                                ))
                                 .collect::<String>()
                         })
                         .on_dark_gray(),
@@ -1049,13 +1049,16 @@ impl VMBuilder {
                         Span::from(" ".repeat(6)),
                         Span::from({
                             let original_length = self.memory.field.to_string().len();
-                            let target_length = 47;
+                            let target_length = 65_usize;
 
                             self.memory
                                 .field
                                 .to_string()
                                 .chars()
-                                .chain(std::iter::repeat_n(' ', target_length - original_length))
+                                .chain(std::iter::repeat_n(
+                                    ' ',
+                                    target_length.saturating_sub(original_length),
+                                ))
                                 .collect::<String>()
                         })
                         .on_dark_gray(),
@@ -1107,14 +1110,14 @@ impl VMBuilder {
                 frame.render_widget(Text::from(arch), arch_block);
                 frame.render_widget(Text::from(uefi), uefi_block);
                 // FIX: cursor shows on the confirmation popup
-                if self.confirmation.is_none() {
+                if self.cancel_confirmation.is_none() {
                     match hardware_section {
-                        HardwareSection::Cpu => {
+                        HardwareSection::Cpu if self.vcpu.field.visual_cursor() < 50 => {
                             let x = area.x + self.vcpu.field.visual_cursor() as u16 + 16;
                             let y = area.y + 2;
                             frame.set_cursor_position((x, y));
                         }
-                        HardwareSection::Memory => {
+                        HardwareSection::Memory if self.memory.field.visual_cursor() < 50 => {
                             let x = area.x + self.memory.field.visual_cursor() as u16 + 16;
                             let y = area.y + 6;
                             frame.set_cursor_position((x, y));
@@ -1187,7 +1190,7 @@ impl VMBuilder {
                     let chunks = Layout::default()
                         .direction(Direction::Vertical)
                         .constraints([Constraint::Fill(1), Constraint::Length(3)])
-                        .margin(4)
+                        .margin(1)
                         .split(area);
 
                     (chunks[0], chunks[1])
@@ -1270,16 +1273,16 @@ impl VMBuilder {
                         if self.disks.is_empty() {
                             vec![
                                 Line::from(vec![
-                                    Span::from("Disks        ").bold(),
-                                    Span::from(" ".repeat(6)),
+                                    Span::from("Additional Disks ").bold(),
+                                    Span::from(" ".repeat(2)),
                                     Span::from(" - "),
                                 ]),
                                 Line::from(""),
                             ]
                         } else {
                             lines.push(Line::from(vec![
-                                Span::from("Disks        ").bold(),
-                                Span::from(" ".repeat(6)),
+                                Span::from("Additional Disks ").bold(),
+                                Span::from(" ".repeat(2)),
                                 Span::from(format!(
                                     " Disk 0: size={}GiB, format={}",
                                     self.disks[0].size, self.disks[0].format
@@ -1314,6 +1317,7 @@ impl VMBuilder {
                     ]),
                 ]);
 
+                let list_width = items.iter().map(|item| item.width()).max().unwrap() as u16;
                 let list = List::new(items);
                 let create = Text::from(vec![Line::from(""), Line::from("CREATE"), Line::from("")])
                     .centered()
@@ -1321,7 +1325,23 @@ impl VMBuilder {
                     .on_yellow()
                     .bold();
 
-                frame.render_widget(list, summary_block);
+                let summary_block = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([
+                        Constraint::Fill(1),
+                        Constraint::Length(list_width),
+                        Constraint::Fill(1),
+                    ])
+                    .flex(ratatui::layout::Flex::Center)
+                    .split(summary_block)[1];
+
+                frame.render_widget(
+                    list,
+                    summary_block.inner(Margin {
+                        horizontal: 0,
+                        vertical: 1,
+                    }),
+                );
 
                 let create_block = Layout::default()
                     .direction(Direction::Horizontal)
@@ -1337,7 +1357,7 @@ impl VMBuilder {
             }
         }
 
-        if let Some(confirmation) = &self.confirmation {
+        if let Some(confirmation) = &self.cancel_confirmation {
             confirmation.render(frame);
         }
     }
