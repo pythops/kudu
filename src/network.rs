@@ -6,6 +6,17 @@ pub enum NetworkBackend {
     User(UserMode),
 }
 
+impl NetworkBackend {
+    pub fn to_qemu_arg(&self) -> Vec<&str> {
+        vec![
+            "-netdev",
+            "user,id=net0",
+            "-device",
+            "virtio-net-pci,netdev=net0",
+        ]
+    }
+}
+
 impl Default for NetworkBackend {
     fn default() -> Self {
         NetworkBackend::User(UserMode::Slirp)

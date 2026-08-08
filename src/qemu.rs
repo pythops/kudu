@@ -26,9 +26,7 @@ impl Qemu {
                 let mut command = Command::new("qemu-system-x86_64");
                 command
                     .arg("-device")
-                    .arg("VGA,edid=on,xres=1920,yres=1080")
-                    .arg("-nic")
-                    .arg("user,model=virtio-net-pci");
+                    .arg("VGA,edid=on,xres=1920,yres=1080");
 
                 command
             }
@@ -39,8 +37,6 @@ impl Qemu {
                     .arg("virt")
                     .arg("-cpu")
                     .arg("max")
-                    .arg("-nic")
-                    .arg("user,model=virtio-net-pci")
                     .arg("-device")
                     .arg("virtio-gpu-pci")
                     .arg("-device")
@@ -57,10 +53,6 @@ impl Qemu {
                     .arg("virt")
                     .arg("-cpu")
                     .arg("max")
-                    .arg("-netdev")
-                    .arg("user,id=net0")
-                    .arg("-device")
-                    .arg("virtio-net-device,netdev=net0") //TODO:
                     .arg("-device")
                     .arg("virtio-gpu-pci")
                     .arg("-device")
@@ -71,6 +63,8 @@ impl Qemu {
                 command
             }
         };
+
+        command.args(vm.network_backend.to_qemu_arg());
 
         if let Ok(host_arch) = Arch::try_from(std::env::consts::ARCH)
             && host_arch == vm.arch

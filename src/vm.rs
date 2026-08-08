@@ -30,6 +30,7 @@ use crate::{
         Event::{self, Download, VMStarted},
     },
     get_kudu_data_dir, get_kudu_run_dir,
+    network::NetworkBackend,
     notification::{Notification, NotificationLevel},
     qemu::Qemu,
     storage::{Drive, Format, Interface, Media},
@@ -47,6 +48,7 @@ pub struct VM {
     pub vcpu: u16,
     pub memory: u32,
     pub drives: Vec<Drive>,
+    pub network_backend: NetworkBackend,
 
     #[serde(skip)]
     pub downloading: Arc<AtomicBool>,
@@ -236,6 +238,7 @@ impl VM {
             events: Vec::new(),
             events_state: ListState::default(),
             vnc: None,
+            network_backend: data.network_backend,
             state: RunState::shutdown,
         };
 
