@@ -42,7 +42,7 @@ pub struct VM {
     pub id: uuid::Uuid,
     pub name: String,
     pub boot_option: BootOption,
-    pub distro: Option<LinuxDistro>,
+    pub os: Option<LinuxDistro>,
     pub arch: Arch,
     pub vcpu: u16,
     pub memory: u32,
@@ -209,7 +209,7 @@ impl VM {
             path.pop();
         }
 
-        if let Some(path) = data.local_file {
+        if let Some(path) = data.boot_file {
             let drive = Drive {
                 path: path.clone(),
                 interface: Interface::Virtio,
@@ -227,7 +227,7 @@ impl VM {
             id,
             name: data.name,
             boot_option: data.boot_option,
-            distro: data.distro,
+            os: data.os,
             arch: data.arch,
             vcpu: data.vcpu,
             memory: data.memory,
@@ -390,7 +390,7 @@ impl VM {
 
     pub fn start(&mut self, sender: Sender<Event>) -> Result<()> {
         if self.boot_option == BootOption::CloudImage {
-            let distro = self.distro.unwrap();
+            let distro = self.os.unwrap();
             if !distro.is_available(self.arch) {
                 thread::spawn({
                     let vm = self.clone();
@@ -421,7 +421,7 @@ impl VM {
                     let _ = sender.send(Event::Notification(Notification::error(e)));
                 }
 
-                if Some(TempleOS) == self.distro {
+                if Some(TempleOS) == self.os {
                     let drive = Drive {
                         path: self.get_boot_file(),
                         interface: Interface::Ide,
@@ -703,7 +703,7 @@ impl VM {
                 Line::from(vec![
                     Span::from("Distro  ").bold().fg(Color::Yellow),
                     Span::from(" ".repeat(4)),
-                    Span::from(self.distro.unwrap().to_string()),
+                    Span::from(self.os.unwrap().to_string()),
                 ]),
                 Line::from(""),
             ]))

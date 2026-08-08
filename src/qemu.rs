@@ -3,7 +3,6 @@ use qapi::{
     Qmp,
     qmp::{self, RunState, VncInfo},
 };
-use serde::{Deserialize, Serialize};
 use std::{
     os::unix::net::UnixStream,
     path::PathBuf,
@@ -13,12 +12,6 @@ use std::{
 };
 
 use crate::{Arch, KVM_ENABLED, event::Event, vm::VM};
-
-#[derive(Debug, Default, Clone, Copy, strum::Display, Deserialize, Serialize)]
-pub enum Network {
-    #[default]
-    User,
-}
 
 #[derive(Debug)]
 pub struct Qemu;
@@ -67,7 +60,7 @@ impl Qemu {
                     .arg("-netdev")
                     .arg("user,id=net0")
                     .arg("-device")
-                    .arg("virtio-net-device,netdev=net0")
+                    .arg("virtio-net-device,netdev=net0") //TODO:
                     .arg("-device")
                     .arg("virtio-gpu-pci")
                     .arg("-device")

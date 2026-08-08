@@ -109,7 +109,7 @@ impl Help {
                 } else {
                     match vm_builder.focused_section {
                         vmbuilder::Section::Storage => {
-                            if vm_builder.new_disk.is_some() {
+                            if vm_builder.storage.new_disk_popup() {
                                 vec![Line::from(vec![
                                     Span::from("↑").bold(),
                                     Span::from("  Up"),

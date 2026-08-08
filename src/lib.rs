@@ -9,6 +9,7 @@ pub mod distro;
 pub mod event;
 pub mod handlers;
 pub mod help;
+pub mod network;
 pub mod notification;
 pub mod qemu;
 pub mod storage;
