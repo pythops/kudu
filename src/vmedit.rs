@@ -14,6 +14,7 @@ use tui_input::{Input, backend::crossterm::EventHandler};
 
 use crate::{
     event::Event,
+    network::{MappingBuilder, PortMapping},
     storage::{Disk, DiskBuilder},
     vm::VM,
 };
@@ -28,6 +29,7 @@ struct UserInputField {
 pub enum Section {
     Hardware(HardwareSection),
     Storage(StorageSection),
+    PortForwarding,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -56,6 +58,10 @@ pub struct EditVM {
     deleted_disks: Vec<PathBuf>,
     deleted_cdroms: Vec<PathBuf>,
     cdrom_state: TableState,
+    added_port_mappings: Vec<PortMapping>,
+    deleted_port_mappings: Vec<PortMapping>,
+    pub new_mapping: Option<MappingBuilder>,
+    mapping_state: TableState,
     vm: VM,
 }
 
@@ -67,12 +73,19 @@ pub struct VMEditData {
     pub new_vcpu: u16,
     pub new_memory: u32,
     pub delete_cdroms: Vec<PathBuf>,
+    pub port_mappings: Vec<PortMapping>,
 }
 
 impl EditVM {
     pub fn new(vm: &VM) -> Self {
         let disks = vm.disks();
         let disk_state = if disks.is_empty() {
+            TableState::default()
+        } else {
+            TableState::default().with_selected(Some(0))
+        };
+
+        let mapping_state = if vm.port_mappings.is_empty() {
             TableState::default()
         } else {
             TableState::default().with_selected(Some(0))
@@ -98,6 +111,10 @@ impl EditVM {
             deleted_disks: Vec::new(),
             deleted_cdroms: Vec::new(),
             cdrom_state: TableState::default(),
+            added_port_mappings: Vec::new(),
+            deleted_port_mappings: Vec::new(),
+            new_mapping: None,
+            mapping_state,
             vm: vm.clone(),
         }
     }
@@ -172,8 +189,42 @@ impl EditVM {
             return Ok(());
         }
 
+        if let Some(new_mapping) = &mut self.new_mapping {
+            match key_event.code {
+                KeyCode::Esc => {
+                    self.new_mapping = None;
+                }
+                KeyCode::Enter => {
+                    if new_mapping.validate() {
+                        let mapping = new_mapping.build();
+                        self.added_port_mappings.push(mapping);
+                        self.new_mapping = None;
+
+                        if self.mapping_state.selected().is_none() {
+                            self.mapping_state.select(Some(0));
+                        }
+                    }
+                }
+
+                _ => {
+                    new_mapping.handle_key_events(key_event);
+                }
+            }
+
+            return Ok(());
+        }
+
         match key_event.code {
             KeyCode::Enter => {
+                let port_mappings = {
+                    let mut port_mappings = self.vm.port_mappings.clone();
+                    for deleted_mapping in &self.deleted_port_mappings {
+                        port_mappings.retain(|mapping| mapping != deleted_mapping);
+                    }
+                    port_mappings.extend(self.added_port_mappings.clone());
+                    port_mappings
+                };
+
                 let _ = sender.send(Event::VMEdited(VMEditData {
                     id: self.vm.id,
                     deleted_disks: self.deleted_disks.clone(),
@@ -181,16 +232,33 @@ impl EditVM {
                     new_vcpu: self.vcpu.field.value().parse::<u16>().unwrap(),
                     new_memory: self.memory.field.value().parse::<u32>().unwrap(),
                     delete_cdroms: self.deleted_cdroms.clone(),
+                    port_mappings,
                 }));
             }
-            KeyCode::Tab | KeyCode::BackTab => match self.focused_section {
+            KeyCode::Tab => match self.focused_section {
                 Section::Hardware(_) => {
                     if self.validate_harware_section() {
                         self.focused_section = Section::Storage(StorageSection::default());
                     }
                 }
                 Section::Storage(_) => {
+                    self.focused_section = Section::PortForwarding;
+                }
+                Section::PortForwarding => {
                     self.focused_section = Section::Hardware(HardwareSection::default())
+                }
+            },
+            KeyCode::BackTab => match self.focused_section {
+                Section::Hardware(_) => {
+                    if self.validate_harware_section() {
+                        self.focused_section = Section::PortForwarding;
+                    }
+                }
+                Section::Storage(_) => {
+                    self.focused_section = Section::Hardware(HardwareSection::default())
+                }
+                Section::PortForwarding => {
+                    self.focused_section = Section::Storage(StorageSection::default());
                 }
             },
             _ => match &self.focused_section {
@@ -317,6 +385,44 @@ impl EditVM {
                         _ => {}
                     },
                 },
+                Section::PortForwarding => match key_event.code {
+                    KeyCode::Char('j') | KeyCode::Down => {
+                        if let Some(index) = self.mapping_state.selected() {
+                            self.mapping_state.select(Some(index.saturating_add(1).min(
+                                self.vm.port_mappings.len() + self.added_port_mappings.len() - 1,
+                            )));
+                        }
+                    }
+                    KeyCode::Char('k') | KeyCode::Up => {
+                        if let Some(index) = self.mapping_state.selected() {
+                            self.mapping_state.select(Some(index.saturating_sub(1)));
+                        }
+                    }
+                    KeyCode::Char('d') => {
+                        if let Some(index) = self.mapping_state.selected() {
+                            if index < self.vm.port_mappings.len() {
+                                let mapping = &self.vm.port_mappings[index];
+                                if !self.deleted_port_mappings.contains(mapping) {
+                                    self.deleted_port_mappings.push(mapping.clone());
+                                }
+                            } else {
+                                let index = index.saturating_sub(self.vm.port_mappings.len());
+                                self.added_port_mappings.remove(index);
+                            }
+                        }
+                    }
+                    KeyCode::Char('u') => {
+                        if let Some(index) = self.mapping_state.selected()
+                            && self.deleted_port_mappings.get(index).is_some()
+                        {
+                            self.deleted_port_mappings.remove(index);
+                        }
+                    }
+                    KeyCode::Char('n') => {
+                        self.new_mapping = Some(MappingBuilder::new());
+                    }
+                    _ => {}
+                },
             },
         }
 
@@ -346,6 +452,16 @@ impl EditVM {
                     Span::from("   Storage 󱛟   ").fg(Color::DarkGray)
                 }
             }
+            Section::PortForwarding => {
+                if is_focused {
+                    Span::styled(
+                        " Port Forwaring   ",
+                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
+                    )
+                } else {
+                    Span::from(" Port Forwaring   ").fg(Color::DarkGray)
+                }
+            }
         }
     }
     fn render_header(&self, frame: &mut Frame, block: Rect) {
@@ -355,6 +471,7 @@ impl EditVM {
                     Line::from(vec![
                         self.title_span(Section::Hardware(HardwareSection::default())),
                         self.title_span(Section::Storage(StorageSection::default())),
+                        self.title_span(Section::PortForwarding),
                     ])
                 })
                 .title_alignment(Alignment::Center)
@@ -655,6 +772,72 @@ impl EditVM {
 
                 if let Some(new_disk) = &self.new_disk {
                     new_disk.render(frame);
+                }
+            }
+            Section::PortForwarding => {
+                let area = area.inner(Margin {
+                    horizontal: 2,
+                    vertical: 2,
+                });
+
+                let widths = [
+                    Constraint::Length(5),
+                    Constraint::Length(10),
+                    Constraint::Length(10),
+                    Constraint::Length(10),
+                ];
+
+                let vm_port_mappings = self.vm.port_mappings.clone();
+
+                let vm_port_mappings = vm_port_mappings.iter().map(|mapping| {
+                    let to_delete = self.deleted_port_mappings.contains(mapping);
+                    Row::new(vec![
+                        {
+                            if to_delete {
+                                "Del".to_string()
+                            } else {
+                                String::new()
+                            }
+                        },
+                        mapping.protocol.to_string(),
+                        mapping.guest_port.to_string(),
+                        mapping.host_port.to_string(),
+                    ])
+                    .style(if to_delete {
+                        Style::new().red()
+                    } else {
+                        Style::default()
+                    })
+                });
+
+                let new_port_mappings = self.added_port_mappings.iter().map(|mapping| {
+                    Row::new(vec![
+                        "New".to_string(),
+                        mapping.protocol.to_string(),
+                        mapping.guest_port.to_string(),
+                        mapping.host_port.to_string(),
+                    ])
+                    .green()
+                });
+
+                let mut mappings: Vec<Row> = Vec::new();
+                mappings.extend(vm_port_mappings);
+                mappings.extend(new_port_mappings);
+
+                let mappings = Table::new(mappings, widths)
+                    .header(
+                        Row::new(vec!["", "Protocol", "Guest Port", "Host Port"])
+                            .style(Style::new().bold())
+                            .bottom_margin(1),
+                    )
+                    .flex(ratatui::layout::Flex::SpaceBetween)
+                    .row_highlight_style(Style::new().on_dark_gray())
+                    .column_spacing(1);
+
+                frame.render_stateful_widget(mappings, area, &mut self.mapping_state);
+
+                if let Some(new_mapping) = &self.new_mapping {
+                    new_mapping.render(frame);
                 }
             }
         }

@@ -338,7 +338,7 @@ impl Overview {
         items
     }
 
-    pub fn render(&self, frame: &mut Frame, block: Rect, cancel_confirmation_popup: bool) {
+    pub fn render(&self, frame: &mut Frame, area: Rect, cancel_confirmation_popup: bool) {
         let (name_block, boot_block, os_block, release_block, cloudinit_block) = {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
@@ -350,7 +350,7 @@ impl Overview {
                     Constraint::Length(4),
                 ])
                 .margin(2)
-                .split(block);
+                .split(area);
 
             (chunks[0], chunks[1], chunks[2], chunks[3], chunks[4])
         };
@@ -532,18 +532,18 @@ impl Overview {
         if !cancel_confirmation_popup {
             match self.section {
                 Section::Name if self.name.field.visual_cursor() < 65 => {
-                    let x = block.x + self.name.field.visual_cursor() as u16 + 16;
-                    let y = block.y + 2;
+                    let x = area.x + self.name.field.visual_cursor() as u16 + 16;
+                    let y = area.y + 2;
                     frame.set_cursor_position((x, y));
                 }
                 Section::LocalFile if self.boot_file.field.visual_cursor() <= 50 => {
-                    let x = block.x + self.boot_file.field.visual_cursor() as u16 + 16;
-                    let y = block.y + 10;
+                    let x = area.x + self.boot_file.field.visual_cursor() as u16 + 16;
+                    let y = area.y + 10;
                     frame.set_cursor_position((x, y));
                 }
                 Section::Cloudinit if self.cloudinit.field.visual_cursor() <= 50 => {
-                    let x = block.x + self.cloudinit.field.visual_cursor() as u16 + 16;
-                    let y = block.y + 18;
+                    let x = area.x + self.cloudinit.field.visual_cursor() as u16 + 16;
+                    let y = area.y + 18;
                     frame.set_cursor_position((x, y));
                 }
                 _ => {}

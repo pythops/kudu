@@ -142,11 +142,15 @@ impl DiskBuilder {
 
     pub fn handle_key_events(&mut self, key_event: KeyEvent) {
         match key_event.code {
-            KeyCode::Down | KeyCode::Up => match self.section {
-                Section::Size => self.section = Section::Format,
-                Section::Format => self.section = Section::Size,
-            },
-            KeyCode::Left | KeyCode::Right if self.section == Section::Format => {
+            KeyCode::Down | KeyCode::Up | KeyCode::Char('j') | KeyCode::Char('k') => {
+                match self.section {
+                    Section::Size => self.section = Section::Format,
+                    Section::Format => self.section = Section::Size,
+                }
+            }
+            KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l')
+                if self.section == Section::Format =>
+            {
                 match self.format {
                     Format::Qcow2 => self.format = Format::Raw,
                     Format::Raw => self.format = Format::Qcow2,

@@ -64,7 +64,7 @@ impl Qemu {
             }
         };
 
-        command.args(vm.network_backend.to_qemu_arg());
+        command.args(vm.network_backend.to_qemu_arg(&vm.port_mappings));
 
         if let Ok(host_arch) = Arch::try_from(std::env::consts::ARCH)
             && host_arch == vm.arch

@@ -1,6 +1,7 @@
 mod hardware;
 mod network;
 mod overview;
+mod port;
 mod storage;
 
 use anyhow::Result;
@@ -21,7 +22,7 @@ use crate::{
     confirmation::cancel::CancelConfirmation,
     distro::LinuxDistro::{self},
     event::Event,
-    network::NetworkBackend,
+    network::{NetworkBackend, PortMapping},
     storage::Disk,
 };
 
@@ -31,6 +32,7 @@ pub enum Section {
     Hardware,
     Storage,
     Network,
+    PortForwarding,
     Summary,
 }
 
@@ -41,6 +43,7 @@ pub struct VMBuilder {
     pub hardware: hardware::Hardware,
     pub storage: storage::Storage,
     pub network: network::Network,
+    pub port_fowrwaring: port::PortForwaring,
     pub cancel_confirmation: Option<CancelConfirmation>,
 }
 
@@ -63,6 +66,7 @@ pub struct VMBuildData {
     pub network_backend: NetworkBackend,
     pub enable_uefi: bool,
     pub disks: Vec<Disk>,
+    pub port_mappings: Vec<PortMapping>,
 }
 
 impl VMBuilder {
@@ -73,6 +77,7 @@ impl VMBuilder {
             hardware: hardware::Hardware::new(),
             storage: storage::Storage::new(),
             network: network::Network::new(),
+            port_fowrwaring: port::PortForwaring::new(),
             cancel_confirmation: None,
         }
     }
@@ -90,6 +95,7 @@ impl VMBuilder {
             enable_uefi: self.hardware.enable_uefi(),
             network_backend: self.network.backend(),
             disks: self.storage.disks(),
+            port_mappings: self.port_fowrwaring.port_mappings(),
         }
     }
 
@@ -117,6 +123,11 @@ impl VMBuilder {
             return Ok(());
         }
 
+        if self.port_fowrwaring.new_mapping_popup() {
+            self.port_fowrwaring.handle_key_events(key_event);
+            return Ok(());
+        }
+
         if key_event.code == KeyCode::Esc {
             self.cancel_confirmation = Some(CancelConfirmation::default());
             return Ok(());
@@ -135,7 +146,8 @@ impl VMBuilder {
                     }
                 }
                 Section::Storage => self.focused_section = Section::Network,
-                Section::Network => self.focused_section = Section::Summary,
+                Section::Network => self.focused_section = Section::PortForwarding,
+                Section::PortForwarding => self.focused_section = Section::Summary,
                 Section::Summary => {
                     self.focused_section = Section::Overview;
                 }
@@ -153,7 +165,8 @@ impl VMBuilder {
                 }
                 Section::Storage => self.focused_section = Section::Hardware,
                 Section::Network => self.focused_section = Section::Storage,
-                Section::Summary => self.focused_section = Section::Network,
+                Section::PortForwarding => self.focused_section = Section::Network,
+                Section::Summary => self.focused_section = Section::PortForwarding,
             },
             _ => match &self.focused_section {
                 Section::Overview => {
@@ -167,6 +180,9 @@ impl VMBuilder {
                     self.storage.handle_key_events(key_event);
                 }
                 Section::Network => {}
+                Section::PortForwarding => {
+                    self.port_fowrwaring.handle_key_events(key_event);
+                }
                 Section::Summary if key_event.code == KeyCode::Enter => {
                     let vm_build_data = self.build();
                     sender.send(Event::VMCreated(vm_build_data))?;
@@ -221,6 +237,16 @@ impl VMBuilder {
                     Span::from("  Network 󰛳    ").fg(Color::DarkGray)
                 }
             }
+            Section::PortForwarding => {
+                if is_focused {
+                    Span::styled(
+                        " Port Forwaring   ",
+                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
+                    )
+                } else {
+                    Span::from(" Port Forwaring   ").fg(Color::DarkGray)
+                }
+            }
             Section::Summary => {
                 if is_focused {
                     Span::styled(
@@ -242,6 +268,7 @@ impl VMBuilder {
                         self.title_span(Section::Hardware),
                         self.title_span(Section::Storage),
                         self.title_span(Section::Network),
+                        self.title_span(Section::PortForwarding),
                         self.title_span(Section::Summary),
                     ])
                 })
@@ -256,7 +283,7 @@ impl VMBuilder {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(35),
+                Constraint::Length(40),
                 Constraint::Fill(1),
             ])
             .margin(1)
@@ -266,7 +293,7 @@ impl VMBuilder {
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(100),
+                Constraint::Length(130),
                 Constraint::Fill(1),
             ])
             .margin(1)
@@ -307,6 +334,16 @@ impl VMBuilder {
 
         self.render_header(frame, section_block);
 
+        let area = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Fill(1),
+                Constraint::Length(80),
+                Constraint::Fill(1),
+            ])
+            .flex(ratatui::layout::Flex::Center)
+            .split(area)[1];
+
         match &self.focused_section {
             Section::Overview => {
                 self.overview
@@ -329,6 +366,10 @@ impl VMBuilder {
                 self.network.render(frame, area);
             }
 
+            Section::PortForwarding => {
+                self.port_fowrwaring.render(frame, area);
+            }
+
             Section::Summary => {
                 let (summary_block, create_block) = {
                     let chunks = Layout::default()
@@ -345,6 +386,7 @@ impl VMBuilder {
                 items.extend(self.hardware.summary());
                 items.extend(self.storage.summary());
                 items.extend(self.network.summary());
+                items.extend(self.port_fowrwaring.summary());
 
                 let list_width = items.iter().map(|item| item.width()).max().unwrap() as u16;
                 let list = List::new(items);

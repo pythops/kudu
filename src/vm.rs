@@ -30,7 +30,7 @@ use crate::{
         Event::{self, Download, VMStarted},
     },
     get_kudu_data_dir, get_kudu_run_dir,
-    network::NetworkBackend,
+    network::{NetworkBackend, PortMapping},
     notification::{Notification, NotificationLevel},
     qemu::Qemu,
     storage::{Drive, Format, Interface, Media},
@@ -49,6 +49,7 @@ pub struct VM {
     pub memory: u32,
     pub drives: Vec<Drive>,
     pub network_backend: NetworkBackend,
+    pub port_mappings: Vec<PortMapping>,
 
     #[serde(skip)]
     pub downloading: Arc<AtomicBool>,
@@ -240,6 +241,7 @@ impl VM {
             vnc: None,
             network_backend: data.network_backend,
             state: RunState::shutdown,
+            port_mappings: data.port_mappings,
         };
 
         let data = serde_json::to_string_pretty(&vm)?;
@@ -312,6 +314,8 @@ impl VM {
             self.drives.push(drive);
             path.pop();
         }
+
+        self.port_mappings = data.port_mappings;
 
         path.push("vm.json");
         let mut file = File::create(&path)?;
