@@ -51,6 +51,14 @@ impl Hardware {
         }
     }
 
+    pub fn set_arch(&mut self, arch: Arch) {
+        self.arch = arch;
+    }
+
+    pub fn set_uefi(&mut self, enable: bool) {
+        self.enable_uefi = enable;
+    }
+
     pub fn vcpu(&self) -> u16 {
         self.vcpu.field.value().parse::<u16>().unwrap()
     }

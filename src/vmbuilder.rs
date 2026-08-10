@@ -20,7 +20,7 @@ use ratatui::{
 use crate::{
     Arch, BootOption,
     confirmation::cancel::CancelConfirmation,
-    distro::LinuxDistro::{self},
+    distro::LinuxDistro::{self, ArchLinux, TempleOS},
     event::Event,
     network::{NetworkBackend, PortMapping},
     storage::Disk,
@@ -155,6 +155,13 @@ impl VMBuilder {
             KeyCode::BackTab => match self.focused_section {
                 Section::Overview => {
                     if self.validate_overview_section() {
+                        if self.overview.os() == Some(TempleOS) {
+                            self.hardware.set_arch(Arch::X86_64);
+                            self.hardware.set_uefi(false);
+                        }
+                        if self.overview.os() == Some(ArchLinux) {
+                            self.hardware.set_arch(Arch::X86_64);
+                        }
                         self.focused_section = Section::Summary;
                     }
                 }

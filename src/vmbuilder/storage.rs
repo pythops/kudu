@@ -103,22 +103,25 @@ impl Storage {
                 ]
             } else {
                 lines.push(Line::from(vec![
-                    Span::from("Additional Disks ").bold(),
-                    Span::from(" ".repeat(2)),
-                    Span::from(format!(
-                        " Disk 0: size={}GiB, format={}",
-                        self.disks[0].size, self.disks[0].format
-                    )),
+                    Span::from("Disks  ").bold(),
+                    Span::from(" ".repeat(14)),
+                    Span::from("     Size   ").bold(),
+                    Span::from(" ".repeat(4)),
+                    Span::from(" Format ").bold(),
+                    Span::from(" ".repeat(4)),
+                    Span::from(" Interface ").bold(),
                 ]));
-                for (index, disk) in self.disks.iter().skip(1).enumerate() {
+                lines.push(Line::from(""));
+                for (index, disk) in self.disks.iter().enumerate() {
                     lines.push(Line::from(vec![
                         Span::from(" ".repeat(20)),
-                        Span::from(format!(
-                            "Disk {}: size={}GiB, format={}",
-                            index + 1,
-                            disk.size,
-                            disk.format
-                        )),
+                        Span::from(index.to_string()),
+                        Span::from(" ".repeat(3)),
+                        Span::from(format!("{:3}GiB", disk.size)),
+                        Span::from(" ".repeat(8)),
+                        Span::from(disk.format.to_string()),
+                        Span::from(" ".repeat(8)),
+                        Span::from(disk.interface.to_string()),
                     ]))
                 }
                 lines.push(Line::from(""));
@@ -142,18 +145,20 @@ impl Storage {
                 Constraint::Length(5),
                 Constraint::Length(15),
                 Constraint::Length(15),
+                Constraint::Length(15),
             ];
             let disks = self.disks.iter().enumerate().map(|(index, disk)| {
                 Row::new(vec![
                     index.to_string(),
                     disk.format.to_string(),
                     format!("{} GiB", disk.size),
+                    disk.interface.to_string(),
                 ])
             });
 
             let disks = Table::new(disks, widths)
                 .header(
-                    Row::new(vec!["", "Format", "Size"])
+                    Row::new(vec!["", "Format", "Size", "Interface"])
                         .style(Style::new().bold())
                         .bottom_margin(1),
                 )

@@ -200,7 +200,7 @@ impl VM {
 
             let drive = Drive {
                 path: path.clone(),
-                interface: Interface::Virtio,
+                interface: disk.interface,
                 format: disk.format,
                 media: Media::Disk,
                 read_only: false,
@@ -253,24 +253,7 @@ impl VM {
         self.drives
             .clone()
             .into_iter()
-            .filter(|drive| {
-                drive.interface == Interface::Virtio
-                    && drive.media == Media::Disk
-                    && drive.path != self.get_boot_file()
-                    && drive.size.is_some()
-            })
-            .collect()
-    }
-
-    pub fn cdroms(&self) -> Vec<Drive> {
-        self.drives
-            .clone()
-            .into_iter()
-            .filter(|drive| {
-                drive.interface == Interface::Virtio
-                    && drive.media == Media::CdRom
-                    && drive.path != self.get_boot_file()
-            })
+            .filter(|drive| drive.interface != Interface::Pflash)
             .collect()
     }
 
@@ -283,10 +266,6 @@ impl VM {
                 fs::remove_file(&path)
                     .with_context(|| format!("can not remove {}", path.to_string_lossy()))?;
             }
-            self.drives.retain(|drive| drive.path != path);
-        }
-
-        for path in data.delete_cdroms {
             self.drives.retain(|drive| drive.path != path);
         }
 
@@ -303,12 +282,12 @@ impl VM {
 
             let drive = Drive {
                 path: path.clone(),
-                interface: Interface::Virtio,
+                interface: disk.interface,
                 format: disk.format,
                 media: Media::Disk,
                 read_only: false,
                 unit: None,
-                size: None,
+                size: Some(disk.size),
             };
 
             self.drives.push(drive);
@@ -450,7 +429,7 @@ impl VM {
                         format: Format::Qcow2,
                         unit: None,
                         read_only: false,
-                        size: None,
+                        size: Drive::size(&self.get_boot_file()).ok(),
                     };
 
                     if !self.drives.contains(&drive) {
@@ -643,7 +622,8 @@ impl VM {
             ]),
             ListItem::from({
                 let mut lines = Vec::new();
-                let disks = self.disks();
+                let mut disks = self.disks();
+                disks.retain(|disk| disk.media == Media::Disk);
                 if disks.is_empty() {
                     vec![
                         Line::from(vec![
@@ -656,22 +636,24 @@ impl VM {
                 } else {
                     lines.push(Line::from(vec![
                         Span::from("Disks  ").bold().fg(Color::Yellow),
+                        Span::from(" ".repeat(6)),
+                        Span::from("      Size   ").bold(),
                         Span::from(" ".repeat(4)),
-                        Span::from(format!(
-                            " Disk 0: size={}GiB, format={}",
-                            disks[0].size.unwrap(),
-                            disks[0].format
-                        )),
+                        Span::from(" Format ").bold(),
+                        Span::from(" ".repeat(4)),
+                        Span::from(" Interface ").bold(),
                     ]));
-                    for (index, disk) in disks.iter().skip(1).enumerate() {
+                    lines.push(Line::from(""));
+                    for (index, disk) in disks.iter().enumerate() {
                         lines.push(Line::from(vec![
                             Span::from(" ".repeat(12)),
-                            Span::from(format!(
-                                "Disk {}: size={}GiB, format={}",
-                                index + 1,
-                                disk.size.unwrap(),
-                                disk.format
-                            )),
+                            Span::from(index.to_string()),
+                            Span::from(" ".repeat(4)),
+                            Span::from(format!("{:3}GiB", disk.size.unwrap())),
+                            Span::from(" ".repeat(8)),
+                            Span::from(disk.format.to_string()),
+                            Span::from(" ".repeat(8)),
+                            Span::from(disk.interface.to_string()),
                         ]))
                     }
                     lines.push(Line::from(""));

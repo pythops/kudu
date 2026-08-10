@@ -31,12 +31,12 @@ pub struct Drive {
 }
 
 impl Drive {
-    pub fn size(&self) -> Result<u64> {
+    pub fn size(path: &Path) -> Result<u64> {
         let output = Command::new("qemu-img")
             .arg("info")
             .arg("--output")
             .arg("json")
-            .arg(self.path.clone())
+            .arg(path)
             .output()?;
 
         let output = String::from_utf8(output.stdout)?;
@@ -92,6 +92,7 @@ pub struct DiskBuilder {
     section: Section,
     pub format: Format,
     size: UserInputField,
+    interface: Interface,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -104,6 +105,7 @@ struct UserInputField {
 pub struct Disk {
     pub size: u64,
     pub format: Format,
+    pub interface: Interface,
 }
 
 impl Disk {
@@ -133,6 +135,7 @@ enum Section {
     #[default]
     Size,
     Format,
+    Interface,
 }
 
 impl DiskBuilder {
@@ -142,18 +145,38 @@ impl DiskBuilder {
 
     pub fn handle_key_events(&mut self, key_event: KeyEvent) {
         match key_event.code {
-            KeyCode::Down | KeyCode::Up | KeyCode::Char('j') | KeyCode::Char('k') => {
-                match self.section {
-                    Section::Size => self.section = Section::Format,
-                    Section::Format => self.section = Section::Size,
-                }
-            }
+            KeyCode::Down | KeyCode::Char('j') => match self.section {
+                Section::Size => self.section = Section::Format,
+                Section::Format => self.section = Section::Interface,
+                Section::Interface => self.section = Section::Size,
+            },
+            KeyCode::Up | KeyCode::Char('k') => match self.section {
+                Section::Size => self.section = Section::Interface,
+                Section::Format => self.section = Section::Size,
+                Section::Interface => self.section = Section::Format,
+            },
             KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l')
                 if self.section == Section::Format =>
             {
                 match self.format {
                     Format::Qcow2 => self.format = Format::Raw,
                     Format::Raw => self.format = Format::Qcow2,
+                }
+            }
+
+            KeyCode::Right | KeyCode::Char('l') if self.section == Section::Interface => {
+                match self.interface {
+                    Interface::Virtio => self.interface = Interface::Ide,
+                    Interface::Ide => self.interface = Interface::Virtio,
+                    _ => {}
+                }
+            }
+
+            KeyCode::Left | KeyCode::Char('h') if self.section == Section::Interface => {
+                match self.interface {
+                    Interface::Virtio => self.interface = Interface::Ide,
+                    Interface::Ide => self.interface = Interface::Virtio,
+                    _ => {}
                 }
             }
 
@@ -194,8 +217,13 @@ impl DiskBuilder {
     pub fn build(&self) -> Disk {
         let size = self.size.field.value().parse::<u64>().unwrap();
         let format = self.format;
+        let interface = self.interface;
 
-        Disk { size, format }
+        Disk {
+            size,
+            format,
+            interface,
+        }
     }
 
     pub fn render(&self, frame: &mut Frame) {
@@ -233,30 +261,30 @@ impl DiskBuilder {
 
         let area = area.inner(Margin {
             horizontal: 2,
-            vertical: 1,
+            vertical: 2,
         });
 
-        let (size_block, format_block) = {
+        let (size_block, format_block, interface_block) = {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(3),
                     Constraint::Length(2),
-                    Constraint::Length(3),
+                    Constraint::Length(2),
+                    Constraint::Length(2),
                 ])
-                .margin(2)
+                .flex(ratatui::layout::Flex::SpaceBetween)
                 .split(area);
 
-            (chunks[0], chunks[2])
+            (chunks[0], chunks[1], chunks[2])
         };
 
         let size = vec![
             Line::from(vec![
                 {
                     if self.section == Section::Size {
-                        Span::from("> Size  ").bold()
+                        Span::from("> Size   ").bold()
                     } else {
-                        Span::from("  Size  ")
+                        Span::from("  Size   ")
                     }
                 },
                 Span::from(" ".repeat(8)),
@@ -275,7 +303,7 @@ impl DiskBuilder {
                 Span::from(" GiB"),
             ]),
             Line::from(vec![
-                Span::from(" ".repeat(16)),
+                Span::from(" ".repeat(17)),
                 Span::from(self.size.clone().error.unwrap_or("".to_string())).red(),
             ]),
         ];
@@ -283,16 +311,29 @@ impl DiskBuilder {
         let format = Line::from(vec![
             {
                 if self.section == Section::Format {
-                    Span::from("> Format  ").bold()
+                    Span::from("> Format   ").bold()
                 } else {
-                    Span::from("  Format  ")
+                    Span::from("  Format   ")
                 }
             },
             Span::from(" ".repeat(6)),
             Span::from(format!("< {} >", self.format)),
         ]);
 
+        let interface = Line::from(vec![
+            {
+                if self.section == Section::Interface {
+                    Span::from("> Interface").bold()
+                } else {
+                    Span::from("  Interface")
+                }
+            },
+            Span::from(" ".repeat(6)),
+            Span::from(format!("< {} >", self.interface)),
+        ]);
+
         frame.render_widget(Text::from(size), size_block);
         frame.render_widget(Text::from(format), format_block);
+        frame.render_widget(Text::from(interface), interface_block);
     }
 }
