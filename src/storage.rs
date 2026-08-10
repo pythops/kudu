@@ -19,6 +19,8 @@ use tui_input::{Input, backend::crossterm::EventHandler};
 use serde_json::Value;
 use std::path::PathBuf;
 
+use crate::Arch;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Drive {
     pub path: PathBuf,
@@ -143,7 +145,7 @@ impl DiskBuilder {
         DiskBuilder::default()
     }
 
-    pub fn handle_key_events(&mut self, key_event: KeyEvent) {
+    pub fn handle_key_events(&mut self, key_event: KeyEvent, arch: Arch) {
         match key_event.code {
             KeyCode::Down | KeyCode::Char('j') => match self.section {
                 Section::Size => self.section = Section::Format,
@@ -164,7 +166,9 @@ impl DiskBuilder {
                 }
             }
 
-            KeyCode::Right | KeyCode::Char('l') if self.section == Section::Interface => {
+            KeyCode::Right | KeyCode::Char('l')
+                if self.section == Section::Interface && arch == Arch::X86_64 =>
+            {
                 match self.interface {
                     Interface::Virtio => self.interface = Interface::Ide,
                     Interface::Ide => self.interface = Interface::Virtio,
@@ -172,7 +176,9 @@ impl DiskBuilder {
                 }
             }
 
-            KeyCode::Left | KeyCode::Char('h') if self.section == Section::Interface => {
+            KeyCode::Left | KeyCode::Char('h')
+                if self.section == Section::Interface && arch == Arch::X86_64 =>
+            {
                 match self.interface {
                     Interface::Virtio => self.interface = Interface::Ide,
                     Interface::Ide => self.interface = Interface::Virtio,

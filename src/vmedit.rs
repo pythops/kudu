@@ -13,6 +13,7 @@ use ratatui::{
 use tui_input::{Input, backend::crossterm::EventHandler};
 
 use crate::{
+    Arch,
     event::Event,
     network::{MappingBuilder, PortMapping},
     storage::{Disk, DiskBuilder, Media},
@@ -53,7 +54,7 @@ pub struct EditVM {
     deleted_port_mappings: Vec<PortMapping>,
     pub new_mapping: Option<MappingBuilder>,
     mapping_state: TableState,
-    vm: VM,
+    pub vm: VM,
 }
 
 #[derive(Debug, Clone)]
@@ -151,7 +152,12 @@ impl EditVM {
         valid
     }
 
-    pub fn handle_key_events(&mut self, key_event: KeyEvent, sender: Sender<Event>) -> Result<()> {
+    pub fn handle_key_events(
+        &mut self,
+        key_event: KeyEvent,
+        arch: Arch,
+        sender: Sender<Event>,
+    ) -> Result<()> {
         if let Some(new_disk) = &mut self.new_disk {
             match key_event.code {
                 KeyCode::Esc => {
@@ -170,7 +176,7 @@ impl EditVM {
                 }
 
                 _ => {
-                    new_disk.handle_key_events(key_event);
+                    new_disk.handle_key_events(key_event, arch);
                 }
             }
 

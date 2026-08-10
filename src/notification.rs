@@ -46,11 +46,12 @@ impl Notification {
             NotificationLevel::Error => (Color::Red, "Error"),
         };
 
-        let text = Text::from(vec![
+        let mut text = Text::from(vec![
             Line::from(title).style(Style::new().fg(color).add_modifier(Modifier::BOLD)),
             Line::from(""),
-            Line::from(self.message.clone()),
         ]);
+
+        text.extend(Text::from(self.message.clone()));
 
         let notification_height = text.height() as u16 + 4;
         let notification_width = text.width() as u16 + 4;

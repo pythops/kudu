@@ -163,20 +163,24 @@ impl Hardware {
                     KeyCode::Right | KeyCode::Char('l') => match self.arch {
                         Arch::X86_64 => {
                             self.arch = Arch::Riscv64;
+                            self.enable_uefi = true;
                         }
                         Arch::Aarch64 => {
                             self.arch = Arch::X86_64;
                         }
                         Arch::Riscv64 => {
                             self.arch = Arch::Aarch64;
+                            self.enable_uefi = true;
                         }
                     },
                     KeyCode::Left | KeyCode::Char('h') => match self.arch {
                         Arch::X86_64 => {
                             self.arch = Arch::Aarch64;
+                            self.enable_uefi = true;
                         }
                         Arch::Aarch64 => {
                             self.arch = Arch::Riscv64;
+                            self.enable_uefi = true;
                         }
                         Arch::Riscv64 => {
                             self.arch = Arch::X86_64;

@@ -8,7 +8,10 @@ use ratatui::{
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::storage::{Disk, DiskBuilder};
+use crate::{
+    Arch,
+    storage::{Disk, DiskBuilder},
+};
 
 #[derive(Debug, Clone)]
 pub struct Storage {
@@ -34,7 +37,7 @@ impl Storage {
         self.new_disk.is_some()
     }
 
-    pub fn handle_key_events(&mut self, key_event: KeyEvent) {
+    pub fn handle_key_events(&mut self, key_event: KeyEvent, arch: Arch) {
         if let Some(new_disk) = &mut self.new_disk {
             match key_event.code {
                 KeyCode::Esc => {
@@ -53,7 +56,7 @@ impl Storage {
                 }
 
                 _ => {
-                    new_disk.handle_key_events(key_event);
+                    new_disk.handle_key_events(key_event, arch);
                 }
             }
 

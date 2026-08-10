@@ -119,7 +119,8 @@ impl VMBuilder {
         }
 
         if self.storage.new_disk_popup() {
-            self.storage.handle_key_events(key_event);
+            self.storage
+                .handle_key_events(key_event, self.hardware.arch());
             return Ok(());
         }
 
@@ -184,7 +185,8 @@ impl VMBuilder {
                         .handle_key_events(key_event, self.overview.os());
                 }
                 Section::Storage => {
-                    self.storage.handle_key_events(key_event);
+                    self.storage
+                        .handle_key_events(key_event, self.hardware.arch());
                 }
                 Section::Network => {}
                 Section::PortForwarding => {

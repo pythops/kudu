@@ -12,12 +12,13 @@ use std::{
     sync::{Arc, atomic::AtomicBool, mpsc::Sender},
     thread::{self},
 };
+use which::which;
 
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Flex, Layout, Margin, Rect},
     style::{Color, Style, Stylize},
-    text::{Line, Span},
+    text::{Line, Span, Text},
     widgets::{Block, BorderType, Borders, List, ListItem, ListState},
 };
 
@@ -31,7 +32,7 @@ use crate::{
     },
     get_kudu_data_dir, get_kudu_run_dir,
     network::{NetworkBackend, PortMapping},
-    notification::{Notification, NotificationLevel},
+    notification::{self, Notification, NotificationLevel},
     qemu::Qemu,
     storage::{Drive, Format, Interface, Media},
     vmbuilder::VMBuildData,
@@ -108,22 +109,39 @@ impl VM {
         Ok(vms)
     }
 
-    pub fn preview(&self) {
+    pub fn preview(&self, sender: Sender<Event>) {
+        if which("vncviewer").is_err() {
+            let error = Text::from(vec![
+                Line::from("vncviwer not found"),
+                Line::from("Please install tigervnc package"),
+            ]);
+
+            let notif = notification::Notification::new(error, NotificationLevel::Info);
+            let _ = sender.send(Event::Notification(notif));
+
+            return;
+        }
         if let Some(vnc) = &self.vnc {
             thread::spawn({
                 let vnc = vnc.clone();
                 move || {
-                    if let Ok(mut child) = Command::new("vncviewer")
+                    if let Ok(child) = Command::new("vncviewer")
                         .arg(format!(
                             "{}:{}",
                             vnc.host.clone().unwrap(),
                             vnc.service.clone().unwrap()
                         ))
                         .stdout(Stdio::null())
-                        .stderr(Stdio::null())
+                        .stderr(Stdio::piped())
                         .spawn()
+                        && let Ok(output) = child.wait_with_output()
+                        && !output.status.success()
                     {
-                        let _ = child.wait();
+                        let error = String::from_utf8_lossy(&output.stderr).to_string();
+
+                        let notif =
+                            notification::Notification::new(error, NotificationLevel::Error);
+                        let _ = sender.send(Event::Notification(notif));
                     }
                 }
             });

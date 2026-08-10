@@ -37,7 +37,7 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App, sender: Sender<Even
                     app.focused_section = FocusedSection::Main;
                     app.edit_vm = None;
                 } else {
-                    edit_vm.handle_key_events(key_event, sender)?;
+                    edit_vm.handle_key_events(key_event, edit_vm.vm.arch, sender)?;
                 }
             }
         }
@@ -111,7 +111,7 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App, sender: Sender<Even
                     && let Some(vm) = app.vms.get(index)
                     && vm.vnc.is_some()
                 {
-                    vm.preview();
+                    vm.preview(sender.clone());
                 }
             }
 
