@@ -312,13 +312,10 @@ impl EditVM {
                         }
                     }
                     KeyCode::Char('u') => {
-                        if let Some(index) = self.disk_state.selected() {
-                            let vm_disks = self.vm.disks();
-
-                            if index < vm_disks.len() {
-                                let disk = &vm_disks[index];
-                                self.deleted_disks.retain(|path| &disk.path != path);
-                            }
+                        if let Some(index) = self.disk_state.selected()
+                            && let Some(disk) = self.vm.disks().get(index)
+                        {
+                            self.deleted_disks.retain(|path| &disk.path != path);
                         }
                     }
                     KeyCode::Char('n') => {
@@ -354,9 +351,10 @@ impl EditVM {
                     }
                     KeyCode::Char('u') => {
                         if let Some(index) = self.mapping_state.selected()
-                            && self.deleted_port_mappings.get(index).is_some()
+                            && let Some(mapping) = self.vm.port_mappings.get(index)
                         {
-                            self.deleted_port_mappings.remove(index);
+                            self.deleted_port_mappings
+                                .retain(|deleted_mapping| deleted_mapping != mapping);
                         }
                     }
                     KeyCode::Char('n') => {

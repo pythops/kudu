@@ -142,11 +142,26 @@ impl LinuxDistro {
 
         if os_release_path.exists() {
             let content = fs::read_to_string(os_release_path)?;
-            for line in content.lines() {
-                if line.starts_with("ID")
-                    && let Some((_, os)) = line.split_once('=')
-                {
-                    return Ok(Some(os.to_string()));
+            let id_like_exists = content
+                .lines()
+                .into_iter()
+                .any(|line| line.starts_with("ID_LIKE"));
+
+            if id_like_exists {
+                for line in content.lines() {
+                    if line.starts_with("ID_LIKE")
+                        && let Some((_, os)) = line.split_once('=')
+                    {
+                        return Ok(Some(os.to_string()));
+                    }
+                }
+            } else {
+                for line in content.lines() {
+                    if line.starts_with("ID")
+                        && let Some((_, os)) = line.split_once('=')
+                    {
+                        return Ok(Some(os.to_string()));
+                    }
                 }
             }
         }

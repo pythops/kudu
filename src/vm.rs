@@ -592,40 +592,40 @@ impl VM {
         let mut items = vec![
             ListItem::from(vec![
                 Line::from(vec![
-                    Span::from("Id      ").bold().fg(Color::Yellow),
-                    Span::from(" ".repeat(4)),
+                    Span::from("Id").bold().fg(Color::Yellow),
+                    Span::from(" ".repeat(15)),
                     Span::from(self.id.to_string()),
                 ]),
                 Line::from(""),
             ]),
             ListItem::from(vec![
                 Line::from(vec![
-                    Span::from("Name    ").bold().fg(Color::Yellow),
-                    Span::from(" ".repeat(4)),
+                    Span::from("Name").bold().fg(Color::Yellow),
+                    Span::from(" ".repeat(13)),
                     Span::from(&self.name),
                 ]),
                 Line::from(""),
             ]),
             ListItem::from(vec![
                 Line::from(vec![
-                    Span::from("State   ").bold().fg(Color::Yellow),
-                    Span::from(" ".repeat(4)),
+                    Span::from("State").bold().fg(Color::Yellow),
+                    Span::from(" ".repeat(12)),
                     Span::from(format!("{:?}", self.state)),
                 ]),
                 Line::from(""),
             ]),
             ListItem::from(vec![
                 Line::from(vec![
-                    Span::from("vCPU    ").bold().fg(Color::Yellow),
-                    Span::from(" ".repeat(4)),
+                    Span::from("vCPU").bold().fg(Color::Yellow),
+                    Span::from(" ".repeat(13)),
                     Span::from(self.vcpu.to_string()),
                 ]),
                 Line::from(""),
             ]),
             ListItem::from(vec![
                 Line::from(vec![
-                    Span::from("Memory  ").bold().fg(Color::Yellow),
-                    Span::from(" ".repeat(4)),
+                    Span::from("Memory").bold().fg(Color::Yellow),
+                    Span::from(" ".repeat(11)),
                     Span::from(format!("{} MB", self.memory)),
                 ]),
                 Line::from(""),
@@ -633,55 +633,15 @@ impl VM {
             ListItem::from(vec![
                 Line::from(vec![
                     Span::from("Firmware").bold().fg(Color::Yellow),
-                    Span::from(" ".repeat(4)),
+                    Span::from(" ".repeat(9)),
                     Span::from(if enable_uefi { "UEFI" } else { "BIOS" }),
                 ]),
                 Line::from(""),
             ]),
-            ListItem::from({
-                let mut lines = Vec::new();
-                let mut disks = self.disks();
-                disks.retain(|disk| disk.media == Media::Disk);
-                if disks.is_empty() {
-                    vec![
-                        Line::from(vec![
-                            Span::from("Disks  ").bold().fg(Color::Yellow),
-                            Span::from(" ".repeat(4)),
-                            Span::from(" - "),
-                        ]),
-                        Line::from(""),
-                    ]
-                } else {
-                    lines.push(Line::from(vec![
-                        Span::from("Disks  ").bold().fg(Color::Yellow),
-                        Span::from(" ".repeat(6)),
-                        Span::from("      Size   ").bold(),
-                        Span::from(" ".repeat(4)),
-                        Span::from(" Format ").bold(),
-                        Span::from(" ".repeat(4)),
-                        Span::from(" Interface ").bold(),
-                    ]));
-                    lines.push(Line::from(""));
-                    for (index, disk) in disks.iter().enumerate() {
-                        lines.push(Line::from(vec![
-                            Span::from(" ".repeat(12)),
-                            Span::from(index.to_string()),
-                            Span::from(" ".repeat(4)),
-                            Span::from(format!("{:3}GiB", disk.size.unwrap())),
-                            Span::from(" ".repeat(8)),
-                            Span::from(disk.format.to_string()),
-                            Span::from(" ".repeat(8)),
-                            Span::from(disk.interface.to_string()),
-                        ]))
-                    }
-                    lines.push(Line::from(""));
-                    lines
-                }
-            }),
             ListItem::from(vec![
                 Line::from(vec![
-                    Span::from("KVM     ").bold().fg(Color::Yellow),
-                    Span::from(" ".repeat(4)),
+                    Span::from("KVM").bold().fg(Color::Yellow),
+                    Span::from(" ".repeat(14)),
                     Span::from({
                         if let Ok(host_arch) = Arch::try_from(std::env::consts::ARCH)
                             && host_arch == self.arch
@@ -697,19 +657,94 @@ impl VM {
             ]),
             ListItem::from(vec![
                 Line::from(vec![
-                    Span::from("Arch    ").bold().fg(Color::Yellow),
-                    Span::from(" ".repeat(4)),
+                    Span::from("Arch").bold().fg(Color::Yellow),
+                    Span::from(" ".repeat(13)),
                     Span::from(self.arch.to_string()),
                 ]),
                 Line::from(""),
             ]),
+            ListItem::from({
+                let mut lines = Vec::new();
+                let mut disks = self.disks();
+                disks.retain(|disk| disk.media == Media::Disk);
+                if disks.is_empty() {
+                    vec![
+                        Line::from(vec![
+                            Span::from("Disks").bold().fg(Color::Yellow),
+                            Span::from(" ".repeat(12)),
+                            Span::from(" - "),
+                        ]),
+                        Line::from(""),
+                    ]
+                } else {
+                    lines.push(Line::from(vec![
+                        Span::from("Disks").bold().fg(Color::Yellow),
+                        Span::from(" ".repeat(18)),
+                        Span::from(" Size   ").bold(),
+                        Span::from(" ".repeat(4)),
+                        Span::from(" Format ").bold(),
+                        Span::from(" ".repeat(4)),
+                        Span::from(" Interface ").bold(),
+                    ]));
+                    lines.push(Line::from(""));
+                    for (index, disk) in disks.iter().enumerate() {
+                        lines.push(Line::from(vec![
+                            Span::from(" ".repeat(17)),
+                            Span::from(index.to_string()),
+                            Span::from(" ".repeat(4)),
+                            Span::from(format!("{:3}GiB", disk.size.unwrap())),
+                            Span::from(" ".repeat(8)),
+                            Span::from(disk.format.to_string()),
+                            Span::from(" ".repeat(8)),
+                            Span::from(disk.interface.to_string()),
+                        ]))
+                    }
+                    lines.push(Line::from(""));
+                    lines
+                }
+            }),
+            ListItem::from({
+                let mut lines = Vec::new();
+                if self.port_mappings.is_empty() {
+                    vec![
+                        Line::from(vec![
+                            Span::from("Port Forwarding").bold().yellow(),
+                            Span::from(" ".repeat(2)),
+                            Span::from(" - "),
+                        ]),
+                        Line::from(""),
+                    ]
+                } else {
+                    lines.push(Line::from(vec![
+                        Span::from("Port Forwarding").bold().yellow(),
+                        Span::from(" ".repeat(2)),
+                        Span::from(format!(
+                            "{} - (Guest){:5} <-> {:5} (Host)",
+                            self.port_mappings[0].protocol,
+                            self.port_mappings[0].guest_port,
+                            self.port_mappings[0].host_port
+                        )),
+                    ]));
+                    for mapping in self.port_mappings.iter().skip(1) {
+                        lines.push(Line::from(vec![
+                            Span::from(" ".repeat(17)),
+                            Span::from(format!(
+                                "{} - (Guest){:5} <-> {:5} (Host)",
+                                mapping.protocol, mapping.guest_port, mapping.host_port
+                            )),
+                        ]))
+                    }
+                    lines.push(Line::from(""));
+                    lines
+                }
+            }),
         ];
 
         if self.boot_option == BootOption::CloudImage {
             items.push(ListItem::from(vec![
                 Line::from(vec![
-                    Span::from("Distro  ").bold().fg(Color::Yellow),
-                    Span::from(" ".repeat(4)),
+                    Span::from("Distro").bold().fg(Color::Yellow),
+                    Span::from(" ".repeat(11)),
                     Span::from(self.os.unwrap().to_string()),
                 ]),
                 Line::from(""),
@@ -719,8 +754,8 @@ impl VM {
         if let Some(vnc_info) = self.vnc.clone() {
             items.push(ListItem::from(vec![
                 Line::from(vec![
-                    Span::from("Vnc     ").bold().fg(Color::Yellow),
-                    Span::from(" ".repeat(4)),
+                    Span::from("Vnc").bold().fg(Color::Yellow),
+                    Span::from(" ".repeat(14)),
                     Span::from({
                         if vnc_info.enabled {
                             format!("{} {}", vnc_info.host.unwrap(), vnc_info.service.unwrap())
