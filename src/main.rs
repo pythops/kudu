@@ -158,15 +158,18 @@ fn main() -> Result<()> {
 
             Event::QemuEvent((id, event)) => {
                 if let Some(vm) = app.vms.iter_mut().find(|m| m.id == id) {
-                    match &event {
+                    let message = match &event {
                         qapi::qmp::Event::STOP { .. } => {
                             vm.state = RunState::paused;
+                            "PAUSE".to_string()
                         }
                         qapi::qmp::Event::RESUME { .. } => {
                             vm.state = RunState::running;
+                            "RESUME".to_string()
                         }
                         qapi::qmp::Event::SUSPEND { .. } => {
                             vm.state = RunState::suspended;
+                            "SUSPEND".to_string()
                         }
                         qapi::qmp::Event::SHUTDOWN { .. } => {
                             if let Err(error) = vm.shutdown() {
@@ -177,20 +180,25 @@ fn main() -> Result<()> {
 
                                 let _ = tui.events.sender.send(Notification(notif));
                             }
+                            "SHUTDOWN".to_string()
                         }
-                        _ => {}
-                    };
-
-                    let event = serde_json::to_value(event).unwrap();
-                    let event_name = event["event"].to_string().replace("_", " ");
-                    let event_name = event_name.trim_matches('\"');
-                    let event_name = if event_name == "STOP" {
-                        "PAUSE"
-                    } else {
-                        event_name
+                        qapi::qmp::Event::VNC_CONNECTED { data, .. } => {
+                            let client_ip = &data.client.host;
+                            format!("New VNC connection established from {}", client_ip)
+                        }
+                        qapi::qmp::Event::VNC_DISCONNECTED { data, .. } => {
+                            let client_ip = &data.client.base.host;
+                            format!("VNC session terminated from {}", client_ip)
+                        }
+                        _ => {
+                            let event = serde_json::to_value(&event).unwrap();
+                            let event_name = event["event"].to_string().replace("_", " ");
+                            event_name.trim_matches('\"').to_string()
+                        }
                     };
 
                     let date = {
+                        let event = serde_json::to_value(&event).unwrap();
                         let seconds = event["timestamp"]["seconds"].as_i64().unwrap_or(0);
                         let microseconds = event["timestamp"]["microseconds"].as_u64().unwrap_or(0);
                         let nanoseconds = (microseconds * 1000) as u32;
@@ -199,7 +207,7 @@ fn main() -> Result<()> {
                         dt.format("%Y-%m-%d %H:%M:%S").to_string()
                     };
 
-                    vm.events.push(format!("{} - {}", date, event_name));
+                    vm.events.push(format!("{} - {}", date, message));
                 }
             }
 
