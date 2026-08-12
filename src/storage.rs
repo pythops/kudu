@@ -258,7 +258,7 @@ impl DiskBuilder {
         frame.render_widget(
             Block::new()
                 .borders(Borders::all())
-                .title(" New Disk ")
+                .title(" New Disk   ")
                 .border_type(BorderType::Thick)
                 .title_alignment(ratatui::layout::HorizontalAlignment::Center)
                 .border_style(Style::default().yellow()),

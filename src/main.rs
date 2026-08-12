@@ -213,6 +213,7 @@ fn main() -> Result<()> {
 
             Event::QemuExit(id) => {
                 if let Some(vm) = app.vms.iter_mut().find(|m| m.id == id)
+                    && vm.state != RunState::shutdown
                     && let Err(error) = vm.shutdown()
                 {
                     let notif =

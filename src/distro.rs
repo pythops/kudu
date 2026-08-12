@@ -25,10 +25,16 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Copy, strum::Display, Deserialize, Serialize)]
 #[non_exhaustive]
 pub enum LinuxDistro {
-    #[strum(to_string = "Arch Linux (btw)")]
+    #[strum(to_string = "Arch Linux (btw) 󰣇 ")]
     ArchLinux,
+
+    #[strum(to_string = "Debian  ")]
     Debian(DebianRelease),
+
+    #[strum(to_string = "Ubuntu  ")]
     Ubuntu(UbuntuRelease),
+
+    #[strum(to_string = "TempleOS 󰓥 ")]
     TempleOS,
 }
 

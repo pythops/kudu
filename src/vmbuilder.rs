@@ -1,49 +1,45 @@
+mod advanced;
 mod hardware;
 mod network;
 mod overview;
 mod port;
+mod quick;
 mod storage;
 
 use anyhow::Result;
-use std::{mem::discriminant, path::PathBuf, sync::mpsc::Sender};
+use std::{path::PathBuf, sync::mpsc::Sender};
 
 use crossterm::event::{KeyCode, KeyEvent};
 
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
-    style::{Color, Style, Stylize},
+    layout::{Constraint, Direction, Layout, Margin},
+    style::{Style, Stylize},
     text::{Line, Span, Text},
-    widgets::{Block, BorderType, Borders, Clear, List, Padding},
+    widgets::{Block, BorderType, Borders, Clear},
 };
 
 use crate::{
     Arch, BootOption,
     confirmation::cancel::CancelConfirmation,
-    distro::LinuxDistro::{self, ArchLinux, TempleOS},
-    event::Event,
+    distro::LinuxDistro::{self},
+    event::Event::{self},
     network::{NetworkBackend, PortMapping},
     storage::Disk,
+    vmbuilder::{advanced::Advanced, quick::Quick},
 };
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Section {
-    Overview,
-    Hardware,
-    Storage,
-    Network,
-    PortForwarding,
-    Summary,
+enum Section {
+    Quick,
+    Advanced,
 }
 
 #[derive(Debug, Clone)]
 pub struct VMBuilder {
-    pub focused_section: Section,
-    pub overview: overview::Overview,
-    pub hardware: hardware::Hardware,
-    pub storage: storage::Storage,
-    pub network: network::Network,
-    pub port_fowrwaring: port::PortForwaring,
+    section: Section,
+    pub advanced: Option<Advanced>,
+    pub quick: Option<Quick>,
     pub cancel_confirmation: Option<CancelConfirmation>,
 }
 
@@ -72,39 +68,18 @@ pub struct VMBuildData {
 impl VMBuilder {
     pub fn new() -> VMBuilder {
         Self {
-            focused_section: Section::Overview,
-            overview: overview::Overview::new(),
-            hardware: hardware::Hardware::new(),
-            storage: storage::Storage::new(),
-            network: network::Network::new(),
-            port_fowrwaring: port::PortForwaring::new(),
+            section: Section::Quick,
+            quick: None,
+            advanced: None,
             cancel_confirmation: None,
         }
     }
 
     pub fn build(&self) -> VMBuildData {
-        VMBuildData {
-            boot_option: self.overview.boot_option(),
-            name: self.overview.name(),
-            cloudinit: self.overview.cloudinit(),
-            boot_file: self.overview.boot_file(),
-            os: self.overview.os(),
-            vcpu: self.hardware.vcpu(),
-            memory: self.hardware.memory(),
-            arch: self.hardware.arch(),
-            enable_uefi: self.hardware.enable_uefi(),
-            network_backend: self.network.backend(),
-            disks: self.storage.disks(),
-            port_mappings: self.port_fowrwaring.port_mappings(),
+        match self.section {
+            Section::Quick => self.quick.clone().unwrap().build(),
+            Section::Advanced => self.advanced.clone().unwrap().build(),
         }
-    }
-
-    fn validate_overview_section(&mut self) -> bool {
-        self.overview.validate()
-    }
-
-    fn validate_harware_section(&mut self) -> bool {
-        self.hardware.validate()
     }
 
     pub fn handle_key_events(&mut self, key_event: KeyEvent, sender: Sender<Event>) -> Result<()> {
@@ -118,181 +93,80 @@ impl VMBuilder {
             return Ok(());
         }
 
-        if self.storage.new_disk_popup() {
-            self.storage
-                .handle_key_events(key_event, self.hardware.arch());
-            return Ok(());
-        }
+        if let Some(advanced) = &mut self.advanced {
+            if advanced.storage.new_disk_popup() {
+                advanced
+                    .storage
+                    .handle_key_events(key_event, advanced.hardware.arch());
+                return Ok(());
+            }
 
-        if self.port_fowrwaring.new_mapping_popup() {
-            self.port_fowrwaring.handle_key_events(key_event);
-            return Ok(());
+            if advanced.port_fowrwaring.new_mapping_popup() {
+                advanced.port_fowrwaring.handle_key_events(key_event);
+                return Ok(());
+            }
         }
 
         if key_event.code == KeyCode::Esc {
-            self.cancel_confirmation = Some(CancelConfirmation::default());
-            return Ok(());
+            if self.advanced.is_some() | self.quick.is_some() {
+                self.cancel_confirmation = Some(CancelConfirmation::default());
+                return Ok(());
+            } else {
+                sender.send(Event::CancelVM(true))?;
+                return Ok(());
+            }
         }
 
-        match key_event.code {
-            KeyCode::Tab => match self.focused_section {
-                Section::Overview => {
-                    if self.validate_overview_section() {
-                        self.focused_section = Section::Hardware;
+        if let Some(advanced) = &mut self.advanced {
+            advanced.handle_key_events(key_event, sender)?;
+        } else if let Some(quick) = &mut self.quick {
+            quick.handle_key_events(key_event, sender);
+        } else {
+            match key_event.code {
+                KeyCode::Tab
+                | KeyCode::BackTab
+                | KeyCode::Char('j')
+                | KeyCode::Char('k')
+                | KeyCode::Down
+                | KeyCode::Up => match self.section {
+                    Section::Quick => self.section = Section::Advanced,
+                    Section::Advanced => self.section = Section::Quick,
+                },
+                KeyCode::Enter => match self.section {
+                    Section::Quick => {
+                        self.quick = Some(Quick::new());
                     }
-                }
-                Section::Hardware => {
-                    if self.validate_harware_section() {
-                        self.focused_section = Section::Storage;
+                    Section::Advanced => {
+                        self.advanced = Some(Advanced::new());
                     }
-                }
-                Section::Storage => self.focused_section = Section::Network,
-                Section::Network => self.focused_section = Section::PortForwarding,
-                Section::PortForwarding => self.focused_section = Section::Summary,
-                Section::Summary => {
-                    self.focused_section = Section::Overview;
-                }
-            },
-            KeyCode::BackTab => match self.focused_section {
-                Section::Overview => {
-                    if self.validate_overview_section() {
-                        if self.overview.os() == Some(TempleOS) {
-                            self.hardware.set_arch(Arch::X86_64);
-                            self.hardware.set_uefi(false);
-                        }
-                        if self.overview.os() == Some(ArchLinux) {
-                            self.hardware.set_arch(Arch::X86_64);
-                        }
-                        self.focused_section = Section::Summary;
-                    }
-                }
-                Section::Hardware => {
-                    if self.validate_harware_section() {
-                        self.focused_section = Section::Overview;
-                    }
-                }
-                Section::Storage => self.focused_section = Section::Hardware,
-                Section::Network => self.focused_section = Section::Storage,
-                Section::PortForwarding => self.focused_section = Section::Network,
-                Section::Summary => self.focused_section = Section::PortForwarding,
-            },
-            _ => match &self.focused_section {
-                Section::Overview => {
-                    self.overview.handle_key_events(key_event);
-                }
-                Section::Hardware => {
-                    self.hardware
-                        .handle_key_events(key_event, self.overview.os());
-                }
-                Section::Storage => {
-                    self.storage
-                        .handle_key_events(key_event, self.hardware.arch());
-                }
-                Section::Network => {}
-                Section::PortForwarding => {
-                    self.port_fowrwaring.handle_key_events(key_event);
-                }
-                Section::Summary if key_event.code == KeyCode::Enter => {
-                    let vm_build_data = self.build();
-                    sender.send(Event::VMCreated(vm_build_data))?;
-                }
+                },
                 _ => {}
-            },
+            }
         }
 
         Ok(())
     }
 
-    fn title_span(&self, section: Section) -> Span<'_> {
-        let is_focused = discriminant(&self.focused_section) == discriminant(&section);
-        match section {
-            Section::Overview => {
-                if is_focused {
-                    Span::styled(
-                        "   Overview     ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("   Overview     ").fg(Color::DarkGray)
-                }
-            }
-            Section::Hardware => {
-                if is_focused {
-                    Span::styled(
-                        "  Hardware    ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("  Hardware    ").fg(Color::DarkGray)
-                }
-            }
-            Section::Storage => {
-                if is_focused {
-                    Span::styled(
-                        "   Storage 󱛟   ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("   Storage 󱛟   ").fg(Color::DarkGray)
-                }
-            }
-            Section::Network => {
-                if is_focused {
-                    Span::styled(
-                        "  Network 󰛳    ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("  Network 󰛳    ").fg(Color::DarkGray)
-                }
-            }
-            Section::PortForwarding => {
-                if is_focused {
-                    Span::styled(
-                        " Port Forwaring   ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from(" Port Forwaring   ").fg(Color::DarkGray)
-                }
-            }
-            Section::Summary => {
-                if is_focused {
-                    Span::styled(
-                        "  Summary  󱇗   ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("  Summary  󱇗   ").fg(Color::DarkGray)
-                }
-            }
+    pub fn render(&mut self, frame: &mut Frame) {
+        if let Some(advanced) = &mut self.advanced {
+            advanced.render(frame);
+        } else if let Some(quick) = &mut self.quick {
+            quick.render(frame, self.cancel_confirmation.is_some());
+        } else {
+            self.render_choice(frame);
+        }
+
+        if let Some(confirmation) = &self.cancel_confirmation {
+            confirmation.render(frame);
         }
     }
-    fn render_header(&self, frame: &mut Frame, block: Rect) {
-        frame.render_widget(
-            Block::default()
-                .title({
-                    Line::from(vec![
-                        self.title_span(Section::Overview),
-                        self.title_span(Section::Hardware),
-                        self.title_span(Section::Storage),
-                        self.title_span(Section::Network),
-                        self.title_span(Section::PortForwarding),
-                        self.title_span(Section::Summary),
-                    ])
-                })
-                .title_alignment(Alignment::Center)
-                .padding(Padding::top(1)),
-            block,
-        );
-    }
 
-    pub fn render(&mut self, frame: &mut Frame) {
+    fn render_choice(&self, frame: &mut Frame) {
         let area = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(40),
+                Constraint::Length(12),
                 Constraint::Fill(1),
             ])
             .margin(1)
@@ -302,7 +176,7 @@ impl VMBuilder {
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(130),
+                Constraint::Length(60),
                 Constraint::Fill(1),
             ])
             .margin(1)
@@ -315,13 +189,7 @@ impl VMBuilder {
                 .title(" New VM 󰏖  ")
                 .title_alignment(ratatui::layout::HorizontalAlignment::Center)
                 .borders(Borders::all())
-                .border_type(
-                    if self.cancel_confirmation.is_some() | self.storage.new_disk_popup() {
-                        BorderType::default()
-                    } else {
-                        BorderType::Thick
-                    },
-                )
+                .border_type(BorderType::Thick)
                 .border_style(Style::default().yellow()),
             area,
         );
@@ -331,114 +199,91 @@ impl VMBuilder {
             vertical: 2,
         });
 
-        let (section_block, area) = {
+        let (quick_block, advanced_block) = {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([Constraint::Length(1), Constraint::Fill(1)])
-                .flex(ratatui::layout::Flex::SpaceBetween)
+                .constraints([
+                    Constraint::Fill(1),
+                    Constraint::Length(3),
+                    Constraint::Length(3),
+                    Constraint::Fill(1),
+                ])
                 .split(area);
 
-            (chunks[0], chunks[1])
+            (chunks[1], chunks[2])
         };
 
-        self.render_header(frame, section_block);
-
-        let area = Layout::default()
+        let quick_block = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(80),
+                Constraint::Length(20),
                 Constraint::Fill(1),
             ])
-            .flex(ratatui::layout::Flex::Center)
-            .split(area)[1];
+            .margin(1)
+            .split(quick_block)[1];
 
-        match &self.focused_section {
-            Section::Overview => {
-                self.overview
-                    .render(frame, area, self.cancel_confirmation.is_some());
+        let advanced_block = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Fill(1),
+                Constraint::Length(20),
+                Constraint::Fill(1),
+            ])
+            .margin(1)
+            .split(advanced_block)[1];
+
+        let quick = if self.section == Section::Quick {
+            Line::from(">   Quick Setup").bold()
+        } else {
+            Line::from("    Quick Setup")
+        };
+
+        let advanced = if self.section == Section::Advanced {
+            Line::from(">   Advanced Options").bold()
+        } else {
+            Line::from("    Advanced Options")
+        };
+
+        frame.render_widget(Text::from(quick), quick_block);
+        frame.render_widget(Text::from(advanced), advanced_block);
+    }
+
+    pub fn help(&self) -> Vec<Line<'static>> {
+        if self.cancel_confirmation.is_some() {
+            vec![Line::from(vec![
+                Span::from("h,←").bold(),
+                Span::from("  Left"),
+                Span::from(" | "),
+                Span::from("l,→").bold(),
+                Span::from("  Right"),
+                Span::from(" | "),
+                Span::from("Esc").bold(),
+                Span::from(" Cancel"),
+                Span::from(" | "),
+                Span::from("Enter").bold(),
+                Span::from(" Confirm"),
+            ])]
+        } else {
+            if let Some(advanced) = &self.advanced {
+                advanced.help()
+            } else if let Some(quick) = &self.quick {
+                quick.help()
+            } else {
+                vec![Line::from(vec![
+                    Span::from("k,↑").bold(),
+                    Span::from("  Up"),
+                    Span::from(" | "),
+                    Span::from("j,↓").bold(),
+                    Span::from("  Down"),
+                    Span::from(" | "),
+                    Span::from("Esc").bold(),
+                    Span::from(" Cancel"),
+                    Span::from(" | "),
+                    Span::from("Enter").bold(),
+                    Span::from(" Confirm"),
+                ])]
             }
-            Section::Hardware => {
-                self.hardware.render(
-                    frame,
-                    area,
-                    self.overview.os(),
-                    self.cancel_confirmation.is_some(),
-                );
-            }
-
-            Section::Storage => {
-                self.storage.render(frame, area);
-            }
-
-            Section::Network => {
-                self.network.render(frame, area);
-            }
-
-            Section::PortForwarding => {
-                self.port_fowrwaring.render(frame, area);
-            }
-
-            Section::Summary => {
-                let (summary_block, create_block) = {
-                    let chunks = Layout::default()
-                        .direction(Direction::Vertical)
-                        .constraints([Constraint::Fill(1), Constraint::Length(3)])
-                        .margin(1)
-                        .split(area);
-
-                    (chunks[0], chunks[1])
-                };
-                let mut items = Vec::new();
-
-                items.extend(self.overview.summary());
-                items.extend(self.hardware.summary());
-                items.extend(self.storage.summary());
-                items.extend(self.network.summary());
-                items.extend(self.port_fowrwaring.summary());
-
-                let list_width = items.iter().map(|item| item.width()).max().unwrap() as u16;
-                let list = List::new(items);
-                let create = Text::from(vec![Line::from(""), Line::from("CREATE"), Line::from("")])
-                    .centered()
-                    .black()
-                    .on_yellow()
-                    .bold();
-
-                let summary_block = Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints([
-                        Constraint::Fill(1),
-                        Constraint::Length(list_width),
-                        Constraint::Fill(1),
-                    ])
-                    .flex(ratatui::layout::Flex::Center)
-                    .split(summary_block)[1];
-
-                frame.render_widget(
-                    list,
-                    summary_block.inner(Margin {
-                        horizontal: 0,
-                        vertical: 1,
-                    }),
-                );
-
-                let create_block = Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints([
-                        Constraint::Fill(1),
-                        Constraint::Length(20),
-                        Constraint::Fill(1),
-                    ])
-                    .flex(ratatui::layout::Flex::SpaceBetween)
-                    .split(create_block)[1];
-
-                frame.render_widget(create, create_block);
-            }
-        }
-
-        if let Some(confirmation) = &self.cancel_confirmation {
-            confirmation.render(frame);
         }
     }
 }

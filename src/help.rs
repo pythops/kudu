@@ -11,7 +11,7 @@ use crate::{
         App,
         FocusedSection::{self},
     },
-    vmbuilder, vmedit,
+    vmedit,
 };
 
 #[derive(Debug)]
@@ -90,115 +90,7 @@ impl Help {
                     ]
                 }
             }
-            FocusedSection::NewVM => {
-                let vm_builder = &&app.new_vm.clone().unwrap();
-                if vm_builder.cancel_confirmation.is_some() {
-                    vec![Line::from(vec![
-                        Span::from("h,←").bold(),
-                        Span::from("  Left"),
-                        Span::from(" | "),
-                        Span::from("l,→").bold(),
-                        Span::from("  Right"),
-                        Span::from(" | "),
-                        Span::from("Esc").bold(),
-                        Span::from(" Cancel"),
-                        Span::from(" | "),
-                        Span::from("Enter").bold(),
-                        Span::from(" Confirm"),
-                    ])]
-                } else {
-                    match vm_builder.focused_section {
-                        vmbuilder::Section::Storage => {
-                            if vm_builder.storage.new_disk_popup() {
-                                vec![Line::from(vec![
-                                    Span::from("↑").bold(),
-                                    Span::from("  Up"),
-                                    Span::from(" | "),
-                                    Span::from("↓").bold(),
-                                    Span::from("  Down"),
-                                    Span::from(" | "),
-                                    Span::from("h,←").bold(),
-                                    Span::from("  Left"),
-                                    Span::from(" | "),
-                                    Span::from("l,→").bold(),
-                                    Span::from("  Right"),
-                                    Span::from(" | "),
-                                    Span::from("Esc").bold(),
-                                    Span::from(" Cancel"),
-                                    Span::from(" | "),
-                                    Span::from("Enter").bold(),
-                                    Span::from(" Confirm"),
-                                ])]
-                            } else {
-                                vec![Line::from(vec![
-                                    Span::from("↑").bold(),
-                                    Span::from("  Up"),
-                                    Span::from(" | "),
-                                    Span::from("↓").bold(),
-                                    Span::from("  Down"),
-                                    Span::from(" | "),
-                                    Span::from("n").bold(),
-                                    Span::from("  New Disk"),
-                                    Span::from(" | "),
-                                    Span::from("d").bold(),
-                                    Span::from("  Delete"),
-                                    Span::from(" | "),
-                                    Span::from("Esc").bold(),
-                                    Span::from(" Cancel"),
-                                    Span::from(" | "),
-                                    Span::from("⇄").bold(),
-                                    Span::from(" Nav"),
-                                ])]
-                            }
-                        }
-                        vmbuilder::Section::Summary => {
-                            vec![Line::from(vec![
-                                Span::from("Esc").bold(),
-                                Span::from(" Cancel"),
-                                Span::from(" | "),
-                                Span::from("Enter").bold(),
-                                Span::from(" Create"),
-                                Span::from(" | "),
-                                Span::from("⇄").bold(),
-                                Span::from(" Nav"),
-                            ])]
-                        }
-                        vmbuilder::Section::Network => {
-                            vec![Line::from(vec![
-                                Span::from("Esc").bold(),
-                                Span::from(" Cancel"),
-                                Span::from(" | "),
-                                Span::from("Enter").bold(),
-                                Span::from(" Create"),
-                                Span::from(" | "),
-                                Span::from("⇄").bold(),
-                                Span::from(" Nav"),
-                            ])]
-                        }
-                        _ => {
-                            vec![Line::from(vec![
-                                Span::from("↑").bold(),
-                                Span::from("  Up"),
-                                Span::from(" | "),
-                                Span::from("↓").bold(),
-                                Span::from("  Down"),
-                                Span::from(" | "),
-                                Span::from("h,←").bold(),
-                                Span::from("  Left"),
-                                Span::from(" | "),
-                                Span::from("l,→").bold(),
-                                Span::from("  Right"),
-                                Span::from(" | "),
-                                Span::from("Esc").bold(),
-                                Span::from(" Cancel"),
-                                Span::from(" | "),
-                                Span::from("⇄").bold(),
-                                Span::from(" Nav"),
-                            ])]
-                        }
-                    }
-                }
-            }
+            FocusedSection::NewVM => app.new_vm.as_ref().unwrap().help(),
             FocusedSection::DeleteConfirmation => {
                 vec![Line::from(vec![
                     Span::from("h,←").bold(),

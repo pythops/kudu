@@ -82,10 +82,18 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App, sender: Sender<Even
             KeyCode::Char('d') => {
                 if let Some(index) = app.vm_list_state.selected()
                     && let Some(vm) = app.vms.get(index)
-                    && vm.state == RunState::shutdown
                 {
-                    app.focused_section = FocusedSection::DeleteConfirmation;
-                    app.delete_confirmation = Some(DeleteConfirmation::default());
+                    if vm.state == RunState::shutdown {
+                        app.focused_section = FocusedSection::DeleteConfirmation;
+                        app.delete_confirmation = Some(DeleteConfirmation::default());
+                    } else {
+                        let notif = Notification::new(
+                            "VM should be shutdown before delete",
+                            NotificationLevel::Info,
+                        );
+
+                        let _ = sender.send(Event::Notification(notif));
+                    }
                 }
             }
             KeyCode::Char('e') => {

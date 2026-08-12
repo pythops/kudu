@@ -606,6 +606,19 @@ impl VM {
                 ]),
                 Line::from(""),
             ]),
+        ];
+
+        if self.boot_option == BootOption::CloudImage {
+            items.push(ListItem::from(vec![
+                Line::from(vec![
+                    Span::from("OS").bold().fg(Color::Yellow),
+                    Span::from(" ".repeat(15)),
+                    Span::from(self.os.unwrap().to_string()),
+                ]),
+                Line::from(""),
+            ]))
+        }
+        items.extend(vec![
             ListItem::from(vec![
                 Line::from(vec![
                     Span::from("State").bold().fg(Color::Yellow),
@@ -738,18 +751,7 @@ impl VM {
                     lines
                 }
             }),
-        ];
-
-        if self.boot_option == BootOption::CloudImage {
-            items.push(ListItem::from(vec![
-                Line::from(vec![
-                    Span::from("Distro").bold().fg(Color::Yellow),
-                    Span::from(" ".repeat(11)),
-                    Span::from(self.os.unwrap().to_string()),
-                ]),
-                Line::from(""),
-            ]))
-        }
+        ]);
 
         if let Some(vnc_info) = self.vnc.clone() {
             items.push(ListItem::from(vec![
