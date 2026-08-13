@@ -334,5 +334,19 @@ impl MappingBuilder {
         frame.render_widget(Text::from(guest_port), guest_port_block);
         frame.render_widget(Text::from(host_port), host_port_block);
         frame.render_widget(Text::from(protocol), protocol_block);
+
+        match self.section {
+            Section::GuestPort if self.guest_port.field.visual_cursor() < 65 => {
+                let x = area.x + self.guest_port.field.visual_cursor() as u16 + 22;
+                let y = area.y + 1;
+                frame.set_cursor_position((x, y));
+            }
+            Section::HostPort if self.host_port.field.visual_cursor() < 50 => {
+                let x = area.x + self.host_port.field.visual_cursor() as u16 + 22;
+                let y = area.y + 4;
+                frame.set_cursor_position((x, y));
+            }
+            _ => {}
+        }
     }
 }

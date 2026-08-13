@@ -217,7 +217,7 @@ impl VMBuilder {
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(20),
+                Constraint::Length(22),
                 Constraint::Fill(1),
             ])
             .margin(1)
@@ -227,7 +227,7 @@ impl VMBuilder {
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(20),
+                Constraint::Length(22),
                 Constraint::Fill(1),
             ])
             .margin(1)

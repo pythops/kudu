@@ -6,12 +6,9 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use crate::{
-    app::{
-        App,
-        FocusedSection::{self},
-    },
-    vmedit,
+use crate::app::{
+    App,
+    FocusedSection::{self},
 };
 
 #[derive(Debug)]
@@ -106,118 +103,7 @@ impl Help {
                     Span::from(" Confirm"),
                 ])]
             }
-            FocusedSection::EditVM => {
-                let edit_vm = &app.edit_vm.clone().unwrap();
-                if matches!(edit_vm.focused_section, vmedit::Section::Hardware(_)) {
-                    vec![Line::from(vec![
-                        Span::from("↑").bold(),
-                        Span::from("  Up"),
-                        Span::from(" | "),
-                        Span::from("↓").bold(),
-                        Span::from("  Down"),
-                        Span::from(" | "),
-                        Span::from("Esc").bold(),
-                        Span::from(" Cancel"),
-                        Span::from(" | "),
-                        Span::from("Enter").bold(),
-                        Span::from(" Confirm"),
-                        Span::from(" | "),
-                        Span::from("⇄").bold(),
-                        Span::from(" Nav"),
-                    ])]
-                } else {
-                    if edit_vm.new_disk.is_some() {
-                        vec![Line::from(vec![
-                            Span::from("↑").bold(),
-                            Span::from("  Up"),
-                            Span::from(" | "),
-                            Span::from("↓").bold(),
-                            Span::from("  Down"),
-                            Span::from(" | "),
-                            Span::from("h,←").bold(),
-                            Span::from("  Left"),
-                            Span::from(" | "),
-                            Span::from("l,→").bold(),
-                            Span::from("  Right"),
-                            Span::from(" | "),
-                            Span::from("Esc").bold(),
-                            Span::from(" Cancel"),
-                            Span::from(" | "),
-                            Span::from("Enter").bold(),
-                            Span::from(" Confirm"),
-                        ])]
-                    } else {
-                        if block.width >= 113 {
-                            vec![Line::from(vec![
-                                Span::from("↑").bold(),
-                                Span::from("  Up"),
-                                Span::from(" | "),
-                                Span::from("↓").bold(),
-                                Span::from("  Down"),
-                                Span::from(" | "),
-                                Span::from("h,←").bold(),
-                                Span::from("  Left"),
-                                Span::from(" | "),
-                                Span::from("l,→").bold(),
-                                Span::from("  Right"),
-                                Span::from(" | "),
-                                Span::from("n").bold(),
-                                Span::from("  New Disk"),
-                                Span::from(" | "),
-                                Span::from("d").bold(),
-                                Span::from("  Delete"),
-                                Span::from(" | "),
-                                Span::from("u").bold(),
-                                Span::from("  Undo"),
-                                Span::from(" | "),
-                                Span::from("Esc").bold(),
-                                Span::from(" Cancel"),
-                                Span::from(" | "),
-                                Span::from("Enter").bold(),
-                                Span::from(" Confirm"),
-                                Span::from(" | "),
-                                Span::from("⇄").bold(),
-                                Span::from(" Nav"),
-                            ])]
-                        } else {
-                            vec![
-                                Line::from(vec![
-                                    Span::from("↑").bold(),
-                                    Span::from("  Up"),
-                                    Span::from(" | "),
-                                    Span::from("↓").bold(),
-                                    Span::from("  Down"),
-                                    Span::from(" | "),
-                                    Span::from("h,←").bold(),
-                                    Span::from("  Left"),
-                                    Span::from(" | "),
-                                    Span::from("l,→").bold(),
-                                    Span::from("  Right"),
-                                ]),
-                                Line::from(vec![
-                                    Span::from("n").bold(),
-                                    Span::from("  New Disk"),
-                                    Span::from(" | "),
-                                    Span::from("d").bold(),
-                                    Span::from("  Delete"),
-                                    Span::from(" | "),
-                                    Span::from("u").bold(),
-                                    Span::from("  Undo"),
-                                    Span::from(" | "),
-                                    Span::from("Esc").bold(),
-                                    Span::from(" Cancel"),
-                                    Span::from(" | "),
-                                    Span::from("Enter").bold(),
-                                    Span::from(" Confirm"),
-                                    Span::from(" | "),
-                                    Span::from("⇄").bold(),
-                                    Span::from(" Nav"),
-                                ]),
-                            ]
-                        }
-                    }
-                }
-            }
+            FocusedSection::EditVM => app.edit_vm.as_ref().unwrap().help(block.width),
         };
 
         let message = Paragraph::new(message).centered().blue();

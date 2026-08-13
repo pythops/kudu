@@ -341,5 +341,11 @@ impl DiskBuilder {
         frame.render_widget(Text::from(size), size_block);
         frame.render_widget(Text::from(format), format_block);
         frame.render_widget(Text::from(interface), interface_block);
+
+        if self.section == Section::Size && self.size.field.visual_cursor() < 40 {
+            let x = area.x + self.size.field.visual_cursor() as u16 + 17;
+            let y = area.y;
+            frame.set_cursor_position((x, y));
+        }
     }
 }

@@ -257,10 +257,10 @@ impl EditVM {
             _ => match &self.focused_section {
                 Section::Hardware(hardware_section) => match hardware_section {
                     HardwareSection::Cpu => match key_event.code {
-                        KeyCode::Up if self.validate_harware_section() => {
+                        KeyCode::Up | KeyCode::Char('k') if self.validate_harware_section() => {
                             self.focused_section = Section::Hardware(HardwareSection::Memory);
                         }
-                        KeyCode::Down if self.validate_harware_section() => {
+                        KeyCode::Down | KeyCode::Char('j') if self.validate_harware_section() => {
                             self.focused_section = Section::Hardware(HardwareSection::Memory);
                         }
                         _ => {
@@ -270,10 +270,10 @@ impl EditVM {
                         }
                     },
                     HardwareSection::Memory => match key_event.code {
-                        KeyCode::Up if self.validate_harware_section() => {
+                        KeyCode::Up | KeyCode::Char('k') if self.validate_harware_section() => {
                             self.focused_section = Section::Hardware(HardwareSection::Cpu);
                         }
-                        KeyCode::Down if self.validate_harware_section() => {
+                        KeyCode::Down | KeyCode::Char('j') if self.validate_harware_section() => {
                             self.focused_section = Section::Hardware(HardwareSection::Cpu);
                         }
                         _ => {
@@ -545,6 +545,20 @@ impl EditVM {
                 ];
                 frame.render_widget(Text::from(cpu), cpu_block);
                 frame.render_widget(Text::from(memory), memory_block);
+
+                match hardware_section {
+                    HardwareSection::Cpu if self.vcpu.field.visual_cursor() < 50 => {
+                        let x = area.x + self.vcpu.field.visual_cursor() as u16 + 16;
+                        let y = area.y + 2;
+                        frame.set_cursor_position((x, y));
+                    }
+                    HardwareSection::Memory if self.memory.field.visual_cursor() < 50 => {
+                        let x = area.x + self.memory.field.visual_cursor() as u16 + 16;
+                        let y = area.y + 6;
+                        frame.set_cursor_position((x, y));
+                    }
+                    _ => {}
+                }
             }
             Section::Storage => {
                 let area = area.inner(Margin {
@@ -652,64 +666,189 @@ impl EditVM {
                     vertical: 2,
                 });
 
-                let widths = [
-                    Constraint::Length(5),
-                    Constraint::Length(10),
-                    Constraint::Length(10),
-                    Constraint::Length(10),
-                ];
+                if self.vm.port_mappings.is_empty() && self.added_port_mappings.is_empty() {
+                    let message = Text::from("Press n to set up port forwading").centered();
+                    frame.render_widget(
+                        message,
+                        area.inner(Margin {
+                            horizontal: 0,
+                            vertical: 3,
+                        }),
+                    );
+                } else {
+                    let widths = [
+                        Constraint::Length(5),
+                        Constraint::Length(10),
+                        Constraint::Length(10),
+                        Constraint::Length(10),
+                    ];
 
-                let vm_port_mappings = self.vm.port_mappings.clone();
+                    let vm_port_mappings = self.vm.port_mappings.clone();
 
-                let vm_port_mappings = vm_port_mappings.iter().map(|mapping| {
-                    let to_delete = self.deleted_port_mappings.contains(mapping);
-                    Row::new(vec![
-                        {
-                            if to_delete {
-                                "Del".to_string()
-                            } else {
-                                String::new()
-                            }
-                        },
-                        mapping.protocol.to_string(),
-                        mapping.guest_port.to_string(),
-                        mapping.host_port.to_string(),
-                    ])
-                    .style(if to_delete {
-                        Style::new().red()
-                    } else {
-                        Style::default()
-                    })
-                });
+                    let vm_port_mappings = vm_port_mappings.iter().map(|mapping| {
+                        let to_delete = self.deleted_port_mappings.contains(mapping);
+                        Row::new(vec![
+                            {
+                                if to_delete {
+                                    "Del".to_string()
+                                } else {
+                                    String::new()
+                                }
+                            },
+                            mapping.protocol.to_string(),
+                            mapping.guest_port.to_string(),
+                            mapping.host_port.to_string(),
+                        ])
+                        .style(if to_delete {
+                            Style::new().red()
+                        } else {
+                            Style::default()
+                        })
+                    });
 
-                let new_port_mappings = self.added_port_mappings.iter().map(|mapping| {
-                    Row::new(vec![
-                        "New".to_string(),
-                        mapping.protocol.to_string(),
-                        mapping.guest_port.to_string(),
-                        mapping.host_port.to_string(),
-                    ])
-                    .green()
-                });
+                    let new_port_mappings = self.added_port_mappings.iter().map(|mapping| {
+                        Row::new(vec![
+                            "New".to_string(),
+                            mapping.protocol.to_string(),
+                            mapping.guest_port.to_string(),
+                            mapping.host_port.to_string(),
+                        ])
+                        .green()
+                    });
 
-                let mut mappings: Vec<Row> = Vec::new();
-                mappings.extend(vm_port_mappings);
-                mappings.extend(new_port_mappings);
+                    let mut mappings: Vec<Row> = Vec::new();
+                    mappings.extend(vm_port_mappings);
+                    mappings.extend(new_port_mappings);
 
-                let mappings = Table::new(mappings, widths)
-                    .header(
-                        Row::new(vec!["", "Protocol", "Guest Port", "Host Port"])
-                            .style(Style::new().bold())
-                            .bottom_margin(1),
-                    )
-                    .flex(ratatui::layout::Flex::SpaceBetween)
-                    .row_highlight_style(Style::new().on_dark_gray())
-                    .column_spacing(1);
+                    let mappings = Table::new(mappings, widths)
+                        .header(
+                            Row::new(vec!["", "Protocol", "Guest Port", "Host Port"])
+                                .style(Style::new().bold())
+                                .bottom_margin(1),
+                        )
+                        .flex(ratatui::layout::Flex::SpaceBetween)
+                        .row_highlight_style(Style::new().on_dark_gray())
+                        .column_spacing(1);
 
-                frame.render_stateful_widget(mappings, area, &mut self.mapping_state);
-
+                    frame.render_stateful_widget(mappings, area, &mut self.mapping_state);
+                }
                 if let Some(new_mapping) = &self.new_mapping {
                     new_mapping.render(frame);
+                }
+            }
+        }
+    }
+
+    pub fn help(&self, block_width: u16) -> Vec<Line<'static>> {
+        match self.focused_section {
+            Section::Hardware(_) => {
+                vec![Line::from(vec![
+                    Span::from("k,↑").bold(),
+                    Span::from("  Up"),
+                    Span::from(" | "),
+                    Span::from("j,↓").bold(),
+                    Span::from("  Down"),
+                    Span::from(" | "),
+                    Span::from("Esc").bold(),
+                    Span::from(" Cancel"),
+                    Span::from(" | "),
+                    Span::from("Enter").bold(),
+                    Span::from(" Confirm"),
+                    Span::from(" | "),
+                    Span::from("⇄").bold(),
+                    Span::from(" Nav"),
+                ])]
+            }
+            _ => {
+                if self.new_disk.is_some() | self.new_mapping.is_some() {
+                    vec![Line::from(vec![
+                        Span::from("k,↑").bold(),
+                        Span::from("  Up"),
+                        Span::from(" | "),
+                        Span::from("j,↓").bold(),
+                        Span::from("  Down"),
+                        Span::from(" | "),
+                        Span::from("h,←").bold(),
+                        Span::from("  Left"),
+                        Span::from(" | "),
+                        Span::from("l,→").bold(),
+                        Span::from("  Right"),
+                        Span::from(" | "),
+                        Span::from("Esc").bold(),
+                        Span::from(" Cancel"),
+                        Span::from(" | "),
+                        Span::from("Enter").bold(),
+                        Span::from(" Confirm"),
+                    ])]
+                } else {
+                    if block_width >= 113 {
+                        vec![Line::from(vec![
+                            Span::from("↑").bold(),
+                            Span::from("  Up"),
+                            Span::from(" | "),
+                            Span::from("↓").bold(),
+                            Span::from("  Down"),
+                            Span::from(" | "),
+                            Span::from("h,←").bold(),
+                            Span::from("  Left"),
+                            Span::from(" | "),
+                            Span::from("l,→").bold(),
+                            Span::from("  Right"),
+                            Span::from(" | "),
+                            Span::from("n").bold(),
+                            Span::from("  Add"),
+                            Span::from(" | "),
+                            Span::from("d").bold(),
+                            Span::from("  Delete"),
+                            Span::from(" | "),
+                            Span::from("u").bold(),
+                            Span::from("  Undo"),
+                            Span::from(" | "),
+                            Span::from("Esc").bold(),
+                            Span::from(" Cancel"),
+                            Span::from(" | "),
+                            Span::from("Enter").bold(),
+                            Span::from(" Confirm"),
+                            Span::from(" | "),
+                            Span::from("⇄").bold(),
+                            Span::from(" Nav"),
+                        ])]
+                    } else {
+                        vec![
+                            Line::from(vec![
+                                Span::from("↑").bold(),
+                                Span::from("  Up"),
+                                Span::from(" | "),
+                                Span::from("↓").bold(),
+                                Span::from("  Down"),
+                                Span::from(" | "),
+                                Span::from("h,←").bold(),
+                                Span::from("  Left"),
+                                Span::from(" | "),
+                                Span::from("l,→").bold(),
+                                Span::from("  Right"),
+                            ]),
+                            Line::from(vec![
+                                Span::from("n").bold(),
+                                Span::from("  Add"),
+                                Span::from(" | "),
+                                Span::from("d").bold(),
+                                Span::from("  Delete"),
+                                Span::from(" | "),
+                                Span::from("u").bold(),
+                                Span::from("  Undo"),
+                                Span::from(" | "),
+                                Span::from("Esc").bold(),
+                                Span::from(" Cancel"),
+                                Span::from(" | "),
+                                Span::from("Enter").bold(),
+                                Span::from(" Confirm"),
+                                Span::from(" | "),
+                                Span::from("⇄").bold(),
+                                Span::from(" Nav"),
+                            ]),
+                        ]
+                    }
                 }
             }
         }
