@@ -60,6 +60,7 @@ impl Cloudinit {
 
         let data = format!(
             r#"#cloud-config
+ssh_pwauth: true
 users:
   - name: {}
     shell: /usr/bin/bash

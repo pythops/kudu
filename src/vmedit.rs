@@ -14,6 +14,7 @@ use tui_input::{Input, backend::crossterm::EventHandler};
 
 use crate::{
     Arch,
+    access::{RemoteAccess, vnc::VncBuilder},
     event::Event,
     network::{MappingBuilder, PortMapping},
     storage::{Disk, DiskBuilder, Media},
@@ -31,6 +32,7 @@ pub enum Section {
     Hardware(HardwareSection),
     Storage,
     PortForwarding,
+    RemoteAccess,
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -54,6 +56,7 @@ pub struct EditVM {
     deleted_port_mappings: Vec<PortMapping>,
     pub new_mapping: Option<MappingBuilder>,
     mapping_state: TableState,
+    vnc: VncBuilder,
     pub vm: VM,
 }
 
@@ -65,6 +68,7 @@ pub struct VMEditData {
     pub new_vcpu: u16,
     pub new_memory: u32,
     pub port_mappings: Vec<PortMapping>,
+    pub remote_access: Option<RemoteAccess>,
 }
 
 impl EditVM {
@@ -80,6 +84,15 @@ impl EditVM {
             TableState::default()
         } else {
             TableState::default().with_selected(Some(0))
+        };
+
+        let vnc = if let Some(RemoteAccess::Vnc(vnc)) = &vm.remote_access {
+            VncBuilder::new(true, vnc.host, vnc.password.clone())
+        } else {
+            VncBuilder {
+                enabled: false,
+                ..Default::default()
+            }
         };
 
         Self {
@@ -104,6 +117,7 @@ impl EditVM {
             deleted_port_mappings: Vec::new(),
             new_mapping: None,
             mapping_state,
+            vnc,
             vm: vm.clone(),
         }
     }
@@ -150,6 +164,10 @@ impl EditVM {
             }
         };
         valid
+    }
+
+    pub fn validate_remote_access(&mut self) -> bool {
+        self.vnc.validate()
     }
 
     pub fn handle_key_events(
@@ -226,6 +244,7 @@ impl EditVM {
                     new_vcpu: self.vcpu.field.value().parse::<u16>().unwrap(),
                     new_memory: self.memory.field.value().parse::<u32>().unwrap(),
                     port_mappings,
+                    remote_access: self.vnc.build().map(RemoteAccess::Vnc),
                 }));
             }
             KeyCode::Tab => match self.focused_section {
@@ -238,13 +257,18 @@ impl EditVM {
                     self.focused_section = Section::PortForwarding;
                 }
                 Section::PortForwarding => {
-                    self.focused_section = Section::Hardware(HardwareSection::default())
+                    self.focused_section = Section::RemoteAccess;
+                }
+                Section::RemoteAccess => {
+                    if self.validate_remote_access() {
+                        self.focused_section = Section::Hardware(HardwareSection::default())
+                    }
                 }
             },
             KeyCode::BackTab => match self.focused_section {
                 Section::Hardware(_) => {
                     if self.validate_harware_section() {
-                        self.focused_section = Section::PortForwarding;
+                        self.focused_section = Section::RemoteAccess;
                     }
                 }
                 Section::Storage => {
@@ -252,6 +276,12 @@ impl EditVM {
                 }
                 Section::PortForwarding => {
                     self.focused_section = Section::Storage;
+                }
+
+                Section::RemoteAccess => {
+                    if self.validate_remote_access() {
+                        self.focused_section = Section::PortForwarding;
+                    }
                 }
             },
             _ => match &self.focused_section {
@@ -362,6 +392,9 @@ impl EditVM {
                     }
                     _ => {}
                 },
+                Section::RemoteAccess => {
+                    self.vnc.handle_key_events(key_event);
+                }
             },
         }
 
@@ -401,6 +434,16 @@ impl EditVM {
                     Span::from(" Port Forwaring   ").fg(Color::DarkGray)
                 }
             }
+            Section::RemoteAccess => {
+                if is_focused {
+                    Span::styled(
+                        " Remote Access 󰢹 ",
+                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
+                    )
+                } else {
+                    Span::from(" Remote Access 󰢹 ").fg(Color::DarkGray)
+                }
+            }
         }
     }
     fn render_header(&self, frame: &mut Frame, block: Rect) {
@@ -411,6 +454,7 @@ impl EditVM {
                         self.title_span(Section::Hardware(HardwareSection::default())),
                         self.title_span(Section::Storage),
                         self.title_span(Section::PortForwarding),
+                        self.title_span(Section::RemoteAccess),
                     ])
                 })
                 .title_alignment(Alignment::Center)
@@ -735,6 +779,9 @@ impl EditVM {
                 if let Some(new_mapping) = &self.new_mapping {
                     new_mapping.render(frame);
                 }
+            }
+            Section::RemoteAccess => {
+                self.vnc.render(frame, area, false);
             }
         }
     }

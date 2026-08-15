@@ -24,6 +24,7 @@ use ratatui::{
 
 use crate::{
     Arch, BootOption, KVM_ENABLED,
+    access::RemoteAccess,
     cloudinit::Cloudinit,
     distro::LinuxDistro::{self, TempleOS},
     event::{
@@ -51,6 +52,7 @@ pub struct VM {
     pub drives: Vec<Drive>,
     pub network_backend: NetworkBackend,
     pub port_mappings: Vec<PortMapping>,
+    pub remote_access: Option<RemoteAccess>,
 
     #[serde(skip)]
     pub downloading: Arc<AtomicBool>,
@@ -260,6 +262,7 @@ impl VM {
             network_backend: data.network_backend,
             state: RunState::shutdown,
             port_mappings: data.port_mappings,
+            remote_access: data.remote_access,
         };
 
         let data = serde_json::to_string_pretty(&vm)?;
@@ -313,6 +316,8 @@ impl VM {
         }
 
         self.port_mappings = data.port_mappings;
+
+        self.remote_access = data.remote_access;
 
         path.push("vm.json");
         let mut file = File::create(&path)?;
@@ -474,6 +479,12 @@ impl VM {
 
         match Qemu::start(self, sender.clone()) {
             Ok(pid) => {
+                if let Some(remote_access) = &self.remote_access
+                    && let RemoteAccess::Vnc(vnc) = remote_access
+                    && let Some(password) = &vnc.password
+                {
+                    Qemu::set_password(self.id, password.to_string())?;
+                }
                 let pid_file_path = VM::get_pid_file(self.id);
                 if let Err(e) = fs::write(pid_file_path, pid.to_string()) {
                     let _ = sender.send(Event::Notification(Notification::error(e)));
@@ -751,19 +762,32 @@ impl VM {
                     lines
                 }
             }),
+            ListItem::from(vec![
+                Line::from(vec![
+                    Span::from("Remote Access").bold().fg(Color::Yellow),
+                    Span::from(" ".repeat(4)),
+                    Span::from(if self.remote_access.is_some() {
+                        "Enabled"
+                    } else {
+                        "Disabled"
+                    }),
+                ]),
+                Line::from(""),
+            ]),
         ]);
 
-        if let Some(vnc_info) = self.vnc.clone() {
+        if let Some(vnc_info) = self.vnc.clone()
+            && let Some(RemoteAccess::Vnc(vnc)) = &self.remote_access
+        {
             items.push(ListItem::from(vec![
                 Line::from(vec![
                     Span::from("Vnc").bold().fg(Color::Yellow),
                     Span::from(" ".repeat(14)),
                     Span::from({
-                        if vnc_info.enabled {
-                            format!("{} {}", vnc_info.host.unwrap(), vnc_info.service.unwrap())
-                        } else {
-                            "Disabled".to_string()
-                        }
+                        let host = vnc_info.host.unwrap();
+                        let port = vnc_info.service.unwrap();
+                        let auth = if vnc.password.is_some() { "On" } else { "Off" };
+                        format!("{}:{} - Auth {}", host, port, auth)
                     }),
                 ]),
                 Line::from(""),

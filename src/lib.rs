@@ -2,6 +2,7 @@ use std::{env, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+pub mod access;
 pub mod app;
 pub mod cloudinit;
 pub mod confirmation;

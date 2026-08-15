@@ -1,3 +1,4 @@
+mod access;
 mod advanced;
 mod hardware;
 mod network;
@@ -21,6 +22,7 @@ use ratatui::{
 
 use crate::{
     Arch, BootOption,
+    access::RemoteAccess,
     confirmation::cancel::CancelConfirmation,
     distro::LinuxDistro::{self},
     event::Event::{self},
@@ -63,6 +65,7 @@ pub struct VMBuildData {
     pub enable_uefi: bool,
     pub disks: Vec<Disk>,
     pub port_mappings: Vec<PortMapping>,
+    pub remote_access: Option<RemoteAccess>,
 }
 
 impl VMBuilder {
@@ -149,7 +152,7 @@ impl VMBuilder {
 
     pub fn render(&mut self, frame: &mut Frame) {
         if let Some(advanced) = &mut self.advanced {
-            advanced.render(frame);
+            advanced.render(frame, self.cancel_confirmation.is_some());
         } else if let Some(quick) = &mut self.quick {
             quick.render(frame, self.cancel_confirmation.is_some());
         } else {

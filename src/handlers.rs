@@ -120,7 +120,8 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App, sender: Sender<Even
             KeyCode::Char('p') => {
                 if let Some(index) = app.vm_list_state.selected()
                     && let Some(vm) = app.vms.get(index)
-                    && vm.vnc.is_some()
+                    && let Some(vnc_info) = &vm.vnc
+                    && vnc_info.enabled
                 {
                     vm.preview(sender.clone());
                 }

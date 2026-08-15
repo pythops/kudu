@@ -1,7 +1,7 @@
 use anyhow::Result;
 use qapi::{
     Qmp,
-    qmp::{self, RunState, VncInfo},
+    qmp::{self, RunState, SetPasswordOptions, SetPasswordOptionsBase, VncInfo},
 };
 use std::{
     os::unix::net::UnixStream,
@@ -73,10 +73,14 @@ impl Qemu {
             command.arg("-enable-kvm");
         }
 
+        if let Some(remote_access) = &vm.remote_access {
+            command.args(remote_access.to_qemu_arg());
+        } else {
+            command.arg("-vnc").arg("none");
+        }
+
         command
             .arg("-daemonize")
-            .arg("-vnc")
-            .arg("127.0.0.1:0,to=99")
             .arg("-qmp")
             .arg(format!(
                 "unix:{},server,wait=off",
@@ -190,5 +194,21 @@ impl Qemu {
         let _ = qmp.handshake().expect("handshake failed");
         let status = qmp.execute(&qmp::query_status {})?;
         Ok(status.status)
+    }
+
+    pub fn set_password(id: uuid::Uuid, password: String) -> Result<()> {
+        let socket = VM::get_socket_file(id);
+        let stream = UnixStream::connect(socket)?;
+        let mut qmp = Qmp::from_stream(&stream);
+        let _ = qmp.handshake()?;
+        let password = SetPasswordOptions::vnc {
+            base: SetPasswordOptionsBase {
+                password,
+                connected: None,
+            },
+            vnc: qmp::SetPasswordOptionsVnc { display: None },
+        };
+        qmp.execute(&qmp::set_password(password))?;
+        Ok(())
     }
 }

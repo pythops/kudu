@@ -1,10 +1,11 @@
 use anyhow::Result;
-use std::{path::PathBuf, sync::mpsc::Sender};
+use std::{net::Ipv4Addr, path::PathBuf, sync::mpsc::Sender};
 
 use tui_input::{Input, backend::crossterm::EventHandler};
 
 use crate::{
     Arch, BootOption,
+    access::{RemoteAccess, vnc::VNC},
     cloudinit::Cloudinit,
     distro::{LinuxDistro, debian::DebianRelease, ubuntu::UbuntuRelease},
     event::Event,
@@ -287,6 +288,11 @@ impl Quick {
     }
 
     pub fn build(&self) -> VMBuildData {
+        let remote_access = Some(RemoteAccess::Vnc(VNC {
+            host: Ipv4Addr::new(127, 0, 0, 1),
+            password: None,
+        }));
+
         VMBuildData {
             boot_option: BootOption::CloudImage,
             name: self.name(),
@@ -300,6 +306,7 @@ impl Quick {
             disks: Vec::new(),
             port_mappings: Vec::new(),
             cloudinit: Some(self.cloudinit().unwrap()), //FIX:
+            remote_access,
         }
     }
 

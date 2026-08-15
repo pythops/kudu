@@ -13,10 +13,9 @@ use ratatui::{
 
 use crate::{
     Arch,
-    confirmation::cancel::CancelConfirmation,
     distro::LinuxDistro::{ArchLinux, TempleOS},
     event::Event,
-    vmbuilder::{VMBuildData, hardware, network, overview, port, storage},
+    vmbuilder::{VMBuildData, access, hardware, network, overview, port, storage},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -26,6 +25,7 @@ pub enum Section {
     Storage,
     Network,
     PortForwarding,
+    RemoteAccess,
     Summary,
 }
 
@@ -37,7 +37,7 @@ pub struct Advanced {
     pub storage: storage::Storage,
     pub network: network::Network,
     pub port_fowrwaring: port::PortForwaring,
-    pub cancel_confirmation: Option<CancelConfirmation>,
+    pub remote_access: access::RemoteAccessBuilder,
 }
 
 impl Default for Advanced {
@@ -55,7 +55,7 @@ impl Advanced {
             storage: storage::Storage::new(),
             network: network::Network::new(),
             port_fowrwaring: port::PortForwaring::new(),
-            cancel_confirmation: None,
+            remote_access: access::RemoteAccessBuilder::new(),
         }
     }
 
@@ -73,6 +73,7 @@ impl Advanced {
             network_backend: self.network.backend(),
             disks: self.storage.disks(),
             port_mappings: self.port_fowrwaring.port_mappings(),
+            remote_access: self.remote_access.access(),
         }
     }
 
@@ -84,17 +85,11 @@ impl Advanced {
         self.hardware.validate()
     }
 
+    fn validate_remote_access(&mut self) -> bool {
+        self.remote_access.validate()
+    }
+
     pub fn handle_key_events(&mut self, key_event: KeyEvent, sender: Sender<Event>) -> Result<()> {
-        if self.cancel_confirmation.is_some() && key_event.code == KeyCode::Esc {
-            self.cancel_confirmation = None;
-            return Ok(());
-        }
-
-        if let Some(confirmation) = &mut self.cancel_confirmation {
-            confirmation.handle_key_events(key_event, sender)?;
-            return Ok(());
-        }
-
         if self.storage.new_disk_popup() {
             self.storage
                 .handle_key_events(key_event, self.hardware.arch());
@@ -103,11 +98,6 @@ impl Advanced {
 
         if self.port_fowrwaring.new_mapping_popup() {
             self.port_fowrwaring.handle_key_events(key_event);
-            return Ok(());
-        }
-
-        if key_event.code == KeyCode::Esc {
-            self.cancel_confirmation = Some(CancelConfirmation::default());
             return Ok(());
         }
 
@@ -125,7 +115,12 @@ impl Advanced {
                 }
                 Section::Storage => self.focused_section = Section::Network,
                 Section::Network => self.focused_section = Section::PortForwarding,
-                Section::PortForwarding => self.focused_section = Section::Summary,
+                Section::PortForwarding => self.focused_section = Section::RemoteAccess,
+                Section::RemoteAccess => {
+                    if self.validate_remote_access() {
+                        self.focused_section = Section::Summary
+                    }
+                }
                 Section::Summary => {
                     self.focused_section = Section::Overview;
                 }
@@ -151,7 +146,12 @@ impl Advanced {
                 Section::Storage => self.focused_section = Section::Hardware,
                 Section::Network => self.focused_section = Section::Storage,
                 Section::PortForwarding => self.focused_section = Section::Network,
-                Section::Summary => self.focused_section = Section::PortForwarding,
+                Section::RemoteAccess => {
+                    if self.validate_remote_access() {
+                        self.focused_section = Section::PortForwarding
+                    }
+                }
+                Section::Summary => self.focused_section = Section::RemoteAccess,
             },
             _ => match &self.focused_section {
                 Section::Overview => {
@@ -173,15 +173,14 @@ impl Advanced {
                     let vm_build_data = self.build();
                     sender.send(Event::VMCreated(vm_build_data))?;
                 }
-                _ => {}
+                Section::RemoteAccess => {
+                    self.remote_access.handle_key_events(key_event);
+                }
+                Section::Summary => {}
             },
         }
 
         Ok(())
-    }
-
-    pub fn render(&mut self, frame: &mut Frame) {
-        self.render_advanced(frame);
     }
 
     fn title_span(&self, section: Section) -> Span<'_> {
@@ -237,6 +236,16 @@ impl Advanced {
                     Span::from(" Port Forwaring   ").fg(Color::DarkGray)
                 }
             }
+            Section::RemoteAccess => {
+                if is_focused {
+                    Span::styled(
+                        " Remote Access 󰢹 ",
+                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
+                    )
+                } else {
+                    Span::from(" Remote Access 󰢹 ").fg(Color::DarkGray)
+                }
+            }
             Section::Summary => {
                 if is_focused {
                     Span::styled(
@@ -259,6 +268,7 @@ impl Advanced {
                         self.title_span(Section::Storage),
                         self.title_span(Section::Network),
                         self.title_span(Section::PortForwarding),
+                        self.title_span(Section::RemoteAccess),
                         self.title_span(Section::Summary),
                     ])
                 })
@@ -268,7 +278,7 @@ impl Advanced {
         );
     }
 
-    pub fn render_advanced(&mut self, frame: &mut Frame) {
+    pub fn render(&mut self, frame: &mut Frame, cancel_popup: bool) {
         let area = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -297,7 +307,10 @@ impl Advanced {
                 .title_alignment(ratatui::layout::HorizontalAlignment::Center)
                 .borders(Borders::all())
                 .border_type(
-                    if self.cancel_confirmation.is_some() | self.storage.new_disk_popup() {
+                    if cancel_popup
+                        | self.storage.new_disk_popup()
+                        | self.port_fowrwaring.new_mapping_popup()
+                    {
                         BorderType::default()
                     } else {
                         BorderType::Thick
@@ -336,16 +349,11 @@ impl Advanced {
 
         match &self.focused_section {
             Section::Overview => {
-                self.overview
-                    .render(frame, area, self.cancel_confirmation.is_some());
+                self.overview.render(frame, area, cancel_popup);
             }
             Section::Hardware => {
-                self.hardware.render(
-                    frame,
-                    area,
-                    self.overview.os(),
-                    self.cancel_confirmation.is_some(),
-                );
+                self.hardware
+                    .render(frame, area, self.overview.os(), cancel_popup);
             }
 
             Section::Storage => {
@@ -358,6 +366,10 @@ impl Advanced {
 
             Section::PortForwarding => {
                 self.port_fowrwaring.render(frame, area);
+            }
+
+            Section::RemoteAccess => {
+                self.remote_access.render(frame, area, cancel_popup);
             }
 
             Section::Summary => {
@@ -377,6 +389,7 @@ impl Advanced {
                 items.extend(self.storage.summary());
                 items.extend(self.network.summary());
                 items.extend(self.port_fowrwaring.summary());
+                items.extend(self.remote_access.summary());
 
                 let list_width = items.iter().map(|item| item.width()).max().unwrap() as u16;
                 let list = List::new(items);
@@ -417,10 +430,6 @@ impl Advanced {
                 frame.render_widget(create, create_block);
             }
         }
-
-        if let Some(confirmation) = &self.cancel_confirmation {
-            confirmation.render(frame);
-        }
     }
 
     pub fn help(&self) -> Vec<Line<'static>> {
@@ -428,17 +437,17 @@ impl Advanced {
             Section::Storage => {
                 if self.storage.new_disk_popup() {
                     vec![Line::from(vec![
-                        Span::from("↑").bold(),
-                        Span::from("  Up"),
+                        Span::from("k,↑").bold(),
+                        Span::from(" Up"),
                         Span::from(" | "),
-                        Span::from("↓").bold(),
-                        Span::from("  Down"),
+                        Span::from("j,↓").bold(),
+                        Span::from(" Down"),
                         Span::from(" | "),
                         Span::from("h,←").bold(),
-                        Span::from("  Left"),
+                        Span::from(" Left"),
                         Span::from(" | "),
                         Span::from("l,→").bold(),
-                        Span::from("  Right"),
+                        Span::from(" Right"),
                         Span::from(" | "),
                         Span::from("Esc").bold(),
                         Span::from(" Cancel"),
@@ -448,17 +457,60 @@ impl Advanced {
                     ])]
                 } else {
                     vec![Line::from(vec![
-                        Span::from("↑").bold(),
-                        Span::from("  Up"),
+                        Span::from("k,↑").bold(),
+                        Span::from(" Up"),
                         Span::from(" | "),
-                        Span::from("↓").bold(),
-                        Span::from("  Down"),
+                        Span::from("j,↓").bold(),
+                        Span::from(" Down"),
                         Span::from(" | "),
                         Span::from("n").bold(),
-                        Span::from("  New Disk"),
+                        Span::from(" Add"),
                         Span::from(" | "),
                         Span::from("d").bold(),
-                        Span::from("  Delete"),
+                        Span::from(" Delete"),
+                        Span::from(" | "),
+                        Span::from("Esc").bold(),
+                        Span::from(" Cancel"),
+                        Span::from(" | "),
+                        Span::from("⇄").bold(),
+                        Span::from(" Nav"),
+                    ])]
+                }
+            }
+            Section::PortForwarding => {
+                if self.port_fowrwaring.new_mapping_popup() {
+                    vec![Line::from(vec![
+                        Span::from("k,↑").bold(),
+                        Span::from(" Up"),
+                        Span::from(" | "),
+                        Span::from("j,↓").bold(),
+                        Span::from(" Down"),
+                        Span::from(" | "),
+                        Span::from("h,←").bold(),
+                        Span::from(" Left"),
+                        Span::from(" | "),
+                        Span::from("l,→").bold(),
+                        Span::from(" Right"),
+                        Span::from(" | "),
+                        Span::from("Esc").bold(),
+                        Span::from(" Cancel"),
+                        Span::from(" | "),
+                        Span::from("Enter").bold(),
+                        Span::from(" Confirm"),
+                    ])]
+                } else {
+                    vec![Line::from(vec![
+                        Span::from("k,↑").bold(),
+                        Span::from(" Up"),
+                        Span::from(" | "),
+                        Span::from("j,↓").bold(),
+                        Span::from(" Down"),
+                        Span::from(" | "),
+                        Span::from("n").bold(),
+                        Span::from(" Add"),
+                        Span::from(" | "),
+                        Span::from("d").bold(),
+                        Span::from(" Delete"),
                         Span::from(" | "),
                         Span::from("Esc").bold(),
                         Span::from(" Cancel"),
@@ -485,9 +537,6 @@ impl Advanced {
                     Span::from("Esc").bold(),
                     Span::from(" Cancel"),
                     Span::from(" | "),
-                    Span::from("Enter").bold(),
-                    Span::from(" Create"),
-                    Span::from(" | "),
                     Span::from("⇄").bold(),
                     Span::from(" Nav"),
                 ])]
@@ -495,10 +544,10 @@ impl Advanced {
             _ => {
                 vec![Line::from(vec![
                     Span::from("↑").bold(),
-                    Span::from("  Up"),
+                    Span::from(" Up"),
                     Span::from(" | "),
                     Span::from("↓").bold(),
-                    Span::from("  Down"),
+                    Span::from(" Down"),
                     Span::from(" | "),
                     Span::from("h,←").bold(),
                     Span::from("  Left"),

@@ -167,9 +167,9 @@ impl App {
             return Err(anyhow!(
                 "Qemu is not installed.\n\
                 Please install one of the packages:\n\
-                qemu-system-x86_64\n\
+                qemu-system-x86\n\
                 qemu-system-aarch64\n\
-                qemu-system-riscv64"
+                qemu-system-riscv"
             ));
         }
 
