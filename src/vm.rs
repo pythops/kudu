@@ -26,14 +26,14 @@ use crate::{
     Arch, BootOption, KVM_ENABLED,
     access::RemoteAccess,
     cloudinit::Cloudinit,
-    distro::LinuxDistro::{self, TempleOS},
     event::{
         DownloadEvent,
         Event::{self, Download, VMStarted},
     },
-    get_kudu_data_dir, get_kudu_run_dir,
+    firmware, get_kudu_data_dir, get_kudu_run_dir,
     network::{NetworkBackend, PortMapping},
     notification::{self, Notification, NotificationLevel},
+    os::Os::{self, TempleOS},
     qemu::Qemu,
     storage::{Drive, Format, Interface, Media},
     vmbuilder::VMBuildData,
@@ -45,7 +45,7 @@ pub struct VM {
     pub id: uuid::Uuid,
     pub name: String,
     pub boot_option: BootOption,
-    pub os: Option<LinuxDistro>,
+    pub os: Option<Os>,
     pub arch: Arch,
     pub vcpu: u16,
     pub memory: u32,
@@ -181,7 +181,7 @@ impl VM {
         }
 
         if data.enable_uefi
-            && let Ok((code, vars)) = VM::get_uefi_file_path(data.arch)
+            && let Ok((code, vars)) = firmware::get_uefi_file_path(data.arch)
         {
             path.push("uefi_vars.fd");
             fs::copy(vars, &path)?;
@@ -233,14 +233,22 @@ impl VM {
         }
 
         if let Some(path) = data.boot_file {
+            let size = Some(Drive::size(&path).unwrap());
+            let format = Drive::format(&path).unwrap();
+            let (media, read_only) = if format == Format::Qcow2 {
+                (Media::Disk, false)
+            } else {
+                (Media::CdRom, true)
+            };
+
             let drive = Drive {
                 path: path.clone(),
                 interface: Interface::Virtio,
-                format: Format::Raw,
-                media: Media::CdRom,
-                read_only: true,
+                format,
+                media,
+                read_only,
                 unit: None,
-                size: None,
+                size,
             };
 
             drives.push(drive);
@@ -530,7 +538,7 @@ impl VM {
 
     pub fn handle_key_events(&mut self, key_event: KeyEvent, sender: Sender<Event>) -> Result<()> {
         match key_event.code {
-            KeyCode::Char(' ') => match self.state {
+            KeyCode::Char(' ') | KeyCode::Enter => match self.state {
                 RunState::running => {
                     Qemu::pause(self.id)?;
                 }
@@ -828,54 +836,5 @@ impl VM {
             }),
             &mut self.events_state,
         );
-    }
-
-    pub fn get_uefi_file_path(arch: Arch) -> Result<(PathBuf, PathBuf)> {
-        if let Ok(Some(os)) = LinuxDistro::get_from_os_release() {
-            match os.as_str() {
-                "ubuntu" | "debian" => match arch {
-                    Arch::X86_64 => Ok((
-                        PathBuf::from("/usr/share/OVMF/OVMF_CODE_4M.fd"),
-                        PathBuf::from("/usr/share/OVMF/OVMF_VARS_4M.fd"),
-                    )),
-                    Arch::Aarch64 => Ok((
-                        PathBuf::from("/usr/share/AAVMF/AAVMF_CODE.fd"),
-                        PathBuf::from("/usr/share/AAVMF/AAVMF_VARS.fd"),
-                    )),
-                    Arch::Riscv64 => Ok((
-                        PathBuf::from("/usr/share/qemu-efi-riscv64/RISCV_VIRT_CODE.fd"),
-                        PathBuf::from("/usr/share/qemu-efi-riscv64/RISCV_VIRT_VARS.fd"),
-                    )),
-                },
-                "arch" => match arch {
-                    Arch::X86_64 => Ok((
-                        PathBuf::from("/usr/share/edk2/x64/OVMF.4m.fd"),
-                        PathBuf::from("/usr/share/edk2/x64/OVMF_VARS.4m.fd"),
-                    )),
-                    Arch::Aarch64 => Ok((
-                        PathBuf::from("/usr/share/edk2/aarch64/QEMU_EFI.fd"),
-                        PathBuf::from("/usr/share/edk2/aarch64/QEMU_VARS.fd"),
-                    )),
-                    Arch::Riscv64 => Ok((
-                        PathBuf::from("/usr/share/edk2/riscv64/RISCV_VIRT_CODE.fd"),
-                        PathBuf::from("/usr/share/edk2/riscv64/RISCV_VIRT_VARS.fd"),
-                    )),
-                },
-                "fedora" | "rhel" => match arch {
-                    Arch::X86_64 => Ok((
-                        PathBuf::from("/usr/share/edk2/ovmf/OVMF_CODE.fd"),
-                        PathBuf::from("/usr/share/edk2/ovmf/OVMF_VARS.fd"),
-                    )),
-                    Arch::Aarch64 => Ok((
-                        PathBuf::from("/usr/share/edk2/aarch64/QEMU_EFI.fd"),
-                        PathBuf::from("/usr/share/edk2/aarch64/QEMU_VARS.fd"),
-                    )),
-                    _ => Err(anyhow::anyhow!("Unsupported Arch")),
-                },
-                _ => Err(anyhow::anyhow!("Unsupported OS")),
-            }
-        } else {
-            Err(anyhow::anyhow!("Can not recognize the OS"))
-        }
     }
 }

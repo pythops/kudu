@@ -13,7 +13,7 @@ use tui_input::{Input, backend::crossterm::EventHandler};
 
 use crate::{
     BootOption,
-    distro::{LinuxDistro, debian::DebianRelease, ubuntu::UbuntuRelease},
+    os::{Os, debian::DebianRelease, ubuntu::UbuntuRelease},
 };
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -40,7 +40,7 @@ pub struct Overview {
     boot_option: BootOption,
     cloudinit: UserInputField,
     boot_file: UserInputField,
-    os: LinuxDistro,
+    os: Os,
     ubuntu_release: UbuntuRelease,
     debian_release: DebianRelease,
 }
@@ -74,13 +74,13 @@ impl Overview {
         }
     }
 
-    pub fn os(&self) -> Option<LinuxDistro> {
+    pub fn os(&self) -> Option<Os> {
         match self.boot_option {
             BootOption::CloudImage => match self.os {
-                LinuxDistro::Debian(_) => Some(LinuxDistro::Debian(self.debian_release)),
-                LinuxDistro::Ubuntu(_) => Some(LinuxDistro::Ubuntu(self.ubuntu_release)),
-                LinuxDistro::ArchLinux => Some(LinuxDistro::ArchLinux),
-                LinuxDistro::TempleOS => Some(LinuxDistro::TempleOS),
+                Os::Debian(_) => Some(Os::Debian(self.debian_release)),
+                Os::Ubuntu(_) => Some(Os::Ubuntu(self.ubuntu_release)),
+                Os::ArchLinux => Some(Os::ArchLinux),
+                Os::TempleOS => Some(Os::TempleOS),
             },
             BootOption::LocalFile => None,
         }
@@ -146,31 +146,31 @@ impl Overview {
                     self.section = Section::Release;
                 }
                 KeyCode::Left | KeyCode::Char('h') => match self.os {
-                    LinuxDistro::Debian(_) => {
-                        self.os = LinuxDistro::Ubuntu(UbuntuRelease::default());
+                    Os::Debian(_) => {
+                        self.os = Os::Ubuntu(UbuntuRelease::default());
                     }
-                    LinuxDistro::Ubuntu(_) => {
-                        self.os = LinuxDistro::ArchLinux;
+                    Os::Ubuntu(_) => {
+                        self.os = Os::ArchLinux;
                     }
-                    LinuxDistro::ArchLinux => {
-                        self.os = LinuxDistro::TempleOS;
+                    Os::ArchLinux => {
+                        self.os = Os::TempleOS;
                     }
-                    LinuxDistro::TempleOS => {
-                        self.os = LinuxDistro::Debian(DebianRelease::default());
+                    Os::TempleOS => {
+                        self.os = Os::Debian(DebianRelease::default());
                     }
                 },
                 KeyCode::Right | KeyCode::Char('l') => match self.os {
-                    LinuxDistro::Debian(_) => {
-                        self.os = LinuxDistro::TempleOS;
+                    Os::Debian(_) => {
+                        self.os = Os::TempleOS;
                     }
-                    LinuxDistro::Ubuntu(_) => {
-                        self.os = LinuxDistro::Debian(DebianRelease::default());
+                    Os::Ubuntu(_) => {
+                        self.os = Os::Debian(DebianRelease::default());
                     }
-                    LinuxDistro::ArchLinux => {
-                        self.os = LinuxDistro::Ubuntu(UbuntuRelease::default());
+                    Os::ArchLinux => {
+                        self.os = Os::Ubuntu(UbuntuRelease::default());
                     }
-                    LinuxDistro::TempleOS => {
-                        self.os = LinuxDistro::ArchLinux;
+                    Os::TempleOS => {
+                        self.os = Os::ArchLinux;
                     }
                 },
                 _ => {}
@@ -183,8 +183,8 @@ impl Overview {
                     self.section = Section::Cloudinit;
                 }
                 KeyCode::Right | KeyCode::Char('l') => match self.os {
-                    LinuxDistro::ArchLinux | LinuxDistro::TempleOS => {}
-                    LinuxDistro::Debian(_) => match self.debian_release {
+                    Os::ArchLinux | Os::TempleOS => {}
+                    Os::Debian(_) => match self.debian_release {
                         DebianRelease::Trixie => {
                             self.debian_release = DebianRelease::Bookworm;
                         }
@@ -195,7 +195,7 @@ impl Overview {
                             self.debian_release = DebianRelease::Trixie;
                         }
                     },
-                    LinuxDistro::Ubuntu(_) => match self.ubuntu_release {
+                    Os::Ubuntu(_) => match self.ubuntu_release {
                         UbuntuRelease::Resolute => {
                             self.ubuntu_release = UbuntuRelease::Noble;
                         }
@@ -208,8 +208,8 @@ impl Overview {
                     },
                 },
                 KeyCode::Left | KeyCode::Char('h') => match self.os {
-                    LinuxDistro::ArchLinux | LinuxDistro::TempleOS => {}
-                    LinuxDistro::Debian(_) => match self.debian_release {
+                    Os::ArchLinux | Os::TempleOS => {}
+                    Os::Debian(_) => match self.debian_release {
                         DebianRelease::Trixie => {
                             self.debian_release = DebianRelease::Forky;
                         }
@@ -220,7 +220,7 @@ impl Overview {
                             self.debian_release = DebianRelease::Bookworm;
                         }
                     },
-                    LinuxDistro::Ubuntu(_) => match self.ubuntu_release {
+                    Os::Ubuntu(_) => match self.ubuntu_release {
                         UbuntuRelease::Resolute => {
                             self.ubuntu_release = UbuntuRelease::Jammy;
                         }
@@ -428,18 +428,18 @@ impl Overview {
             Span::from(" ".repeat(5)),
             Span::from({
                 match self.os {
-                    LinuxDistro::Ubuntu(_) => format!(
+                    Os::Ubuntu(_) => format!(
                         "< {} - {} >",
                         self.ubuntu_release,
                         self.ubuntu_release.get_number()
                     ),
-                    LinuxDistro::Debian(_) => {
+                    Os::Debian(_) => {
                         format!(
                             "< {} - {} >",
                             self.debian_release, self.debian_release as u8,
                         )
                     }
-                    LinuxDistro::ArchLinux | LinuxDistro::TempleOS => "-".to_string(),
+                    Os::ArchLinux | Os::TempleOS => "-".to_string(),
                 }
             }),
         ]);
@@ -448,9 +448,9 @@ impl Overview {
             Line::from(vec![
                 {
                     if self.section == Section::LocalFile {
-                        Span::from("> File Path  ").bold()
+                        Span::from("> File Path ").bold()
                     } else {
-                        Span::from("  File Path  ")
+                        Span::from("  File Path ")
                     }
                 },
                 Span::from(" ".repeat(2)),
@@ -531,17 +531,17 @@ impl Overview {
         // FIX: cursor shows on the confirmation popup
         if !cancel_confirmation_popup {
             match self.section {
-                Section::Name if self.name.field.visual_cursor() < 65 => {
+                Section::Name if self.name.field.visual_cursor() < 61 => {
                     let x = area.x + self.name.field.visual_cursor() as u16 + 16;
                     let y = area.y + 2;
                     frame.set_cursor_position((x, y));
                 }
-                Section::LocalFile if self.boot_file.field.visual_cursor() <= 50 => {
+                Section::LocalFile if self.boot_file.field.visual_cursor() <= 61 => {
                     let x = area.x + self.boot_file.field.visual_cursor() as u16 + 16;
                     let y = area.y + 10;
                     frame.set_cursor_position((x, y));
                 }
-                Section::Cloudinit if self.cloudinit.field.visual_cursor() <= 50 => {
+                Section::Cloudinit if self.cloudinit.field.visual_cursor() <= 61 => {
                     let x = area.x + self.cloudinit.field.visual_cursor() as u16 + 16;
                     let y = area.y + 18;
                     frame.set_cursor_position((x, y));

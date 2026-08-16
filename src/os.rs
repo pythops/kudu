@@ -24,7 +24,7 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Copy, strum::Display, Deserialize, Serialize)]
 #[non_exhaustive]
-pub enum LinuxDistro {
+pub enum Os {
     #[strum(to_string = "Arch Linux (btw) 󰣇 ")]
     ArchLinux,
 
@@ -38,35 +38,35 @@ pub enum LinuxDistro {
     TempleOS,
 }
 
-impl Default for LinuxDistro {
+impl Default for Os {
     fn default() -> Self {
-        LinuxDistro::Debian(DebianRelease::Trixie)
+        Os::Debian(DebianRelease::Trixie)
     }
 }
 
-impl LinuxDistro {
+impl Os {
     pub fn get_file_path(&self, arch: Arch) -> PathBuf {
         let mut path = get_kudu_data_dir().join("storage");
 
         match self {
-            LinuxDistro::Debian(release) => {
+            Os::Debian(release) => {
                 path.push(format!(
                     "debian-{}-{}.qcow2",
                     release.to_string().to_lowercase(),
                     arch.to_string().to_lowercase()
                 ));
             }
-            LinuxDistro::Ubuntu(release) => {
+            Os::Ubuntu(release) => {
                 path.push(format!(
                     "ubuntu-{}-{}.qcow2",
                     release.to_string().to_lowercase(),
                     arch.to_string().to_lowercase()
                 ));
             }
-            LinuxDistro::ArchLinux => {
+            Os::ArchLinux => {
                 path.push("arch.qcow2");
             }
-            LinuxDistro::TempleOS => {
+            Os::TempleOS => {
                 path.push("templeos.iso");
             }
         }
@@ -77,13 +77,13 @@ impl LinuxDistro {
         let path = self.get_file_path(arch);
 
         let url = match self {
-            LinuxDistro::Debian(release) => release.get_url(arch),
-            LinuxDistro::Ubuntu(release) => release.get_url(arch),
-            LinuxDistro::ArchLinux => {
+            Os::Debian(release) => release.get_url(arch),
+            Os::Ubuntu(release) => release.get_url(arch),
+            Os::ArchLinux => {
                 "https://geo.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2"
                     .to_string()
             }
-            LinuxDistro::TempleOS => "https://templeos.org/Downloads/TempleOS.ISO".to_string(),
+            Os::TempleOS => "https://templeos.org/Downloads/TempleOS.ISO".to_string(),
         };
 
         if !path.exists() {

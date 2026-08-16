@@ -1220,6 +1220,7 @@ dependencies = [
  "crossterm",
  "dirs",
  "kvm-ioctls",
+ "lazy_static",
  "libc",
  "qapi",
  "ratatui",

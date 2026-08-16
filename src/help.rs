@@ -18,7 +18,7 @@ impl Help {
     pub fn render(&self, frame: &mut Frame, app: &App, block: Rect) {
         let message = match app.focused_section {
             FocusedSection::Main => {
-                if block.width >= 113 {
+                if block.width >= 117 {
                     vec![Line::from(vec![
                         Span::from("k,↑").bold(),
                         Span::from("  Up"),
@@ -47,7 +47,7 @@ impl Help {
                         Span::from("q").bold(),
                         Span::from(" Quit"),
                         Span::from(" | "),
-                        Span::from("󱁐 ").bold(),
+                        Span::from("󱁐  or 󰌑 ").bold(),
                         Span::from(" Start/Pause/Resume"),
                     ])]
                 } else {

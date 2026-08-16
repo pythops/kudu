@@ -13,8 +13,8 @@ use ratatui::{
 
 use crate::{
     Arch,
-    distro::LinuxDistro::{ArchLinux, TempleOS},
     event::Event,
+    os::Os::{ArchLinux, TempleOS},
     vmbuilder::{VMBuildData, access, hardware, network, overview, port, storage},
 };
 

@@ -3,12 +3,13 @@ name = "kudu"
 version = "0.1.0"
 edition = "2024"
 license = "GPL-3.0-or-later"
-description = "VM TUI Manager"
+description = "Easily manage VMs on Linux"
 readme = "README.md"
 homepage = "https://github.com/pythops/kudu"
 repository = "https://github.com/pythops/kudu"
 
 [dependencies]
+lazy_static = "1.5.0"
 crossterm = { version = "0.29", default-features = false, features = [
     "events",
 ] }

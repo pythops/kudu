@@ -9,7 +9,11 @@ use ratatui::{
 use crossterm::event::{KeyCode, KeyEvent};
 use tui_input::{Input, backend::crossterm::EventHandler};
 
-use crate::{Arch, distro::LinuxDistro};
+use crate::{
+    Arch::{self},
+    app::{INSTALLED_ARCHS, INSTALLED_UEFI},
+    os::Os,
+};
 
 #[derive(Debug, Clone, Default)]
 struct UserInputField {
@@ -36,9 +40,64 @@ pub struct Hardware {
 
 impl Hardware {
     pub fn new() -> Self {
+        let (arch, enable_uefi) = {
+            match Arch::try_from(std::env::consts::ARCH).unwrap_or_default() {
+                Arch::X86_64 => {
+                    if INSTALLED_ARCHS.contains(&Arch::X86_64) {
+                        if INSTALLED_UEFI.contains(&Arch::X86_64) {
+                            (Arch::X86_64, true)
+                        } else {
+                            (Arch::X86_64, false)
+                        }
+                    } else {
+                        if INSTALLED_ARCHS.contains(&Arch::Aarch64)
+                            && INSTALLED_UEFI.contains(&Arch::Aarch64)
+                        {
+                            (Arch::Aarch64, true)
+                        } else {
+                            (Arch::Riscv64, true)
+                        }
+                    }
+                }
+                Arch::Aarch64 => {
+                    if INSTALLED_ARCHS.contains(&Arch::Aarch64)
+                        && INSTALLED_UEFI.contains(&Arch::Aarch64)
+                    {
+                        (Arch::Aarch64, true)
+                    } else {
+                        if INSTALLED_ARCHS.contains(&Arch::X86_64) {
+                            if INSTALLED_UEFI.contains(&Arch::X86_64) {
+                                (Arch::X86_64, true)
+                            } else {
+                                (Arch::X86_64, false)
+                            }
+                        } else {
+                            (Arch::Riscv64, true)
+                        }
+                    }
+                }
+                Arch::Riscv64 => {
+                    if INSTALLED_ARCHS.contains(&Arch::Riscv64)
+                        && INSTALLED_UEFI.contains(&Arch::Riscv64)
+                    {
+                        (Arch::Riscv64, true)
+                    } else {
+                        if INSTALLED_ARCHS.contains(&Arch::X86_64) {
+                            if INSTALLED_UEFI.contains(&Arch::X86_64) {
+                                (Arch::X86_64, true)
+                            } else {
+                                (Arch::X86_64, false)
+                            }
+                        } else {
+                            (Arch::Aarch64, true)
+                        }
+                    }
+                }
+            }
+        };
         Self {
             section: Section::Cpu,
-            arch: Arch::try_from(std::env::consts::ARCH).unwrap_or_default(),
+            arch,
             vcpu: UserInputField {
                 field: Input::from("1"),
                 error: None,
@@ -47,7 +106,7 @@ impl Hardware {
                 field: Input::from("512"),
                 error: None,
             },
-            enable_uefi: true,
+            enable_uefi,
         }
     }
 
@@ -119,7 +178,7 @@ impl Hardware {
         valid
     }
 
-    pub fn handle_key_events(&mut self, key_event: KeyEvent, os: Option<LinuxDistro>) {
+    pub fn handle_key_events(&mut self, key_event: KeyEvent, os: Option<Os>) {
         match self.section {
             Section::Cpu => match key_event.code {
                 KeyCode::Up if self.validate() => {
@@ -148,42 +207,84 @@ impl Hardware {
                 }
             },
             Section::Arch => match os {
-                Some(LinuxDistro::TempleOS) | Some(LinuxDistro::ArchLinux) => {
-                    match key_event.code {
-                        KeyCode::Up | KeyCode::Char('k') => {
-                            self.section = Section::Memory;
-                        }
-                        KeyCode::Down | KeyCode::Char('j') => {
-                            self.section = Section::Uefi;
-                        }
-                        _ => {}
+                Some(Os::TempleOS) | Some(Os::ArchLinux) => match key_event.code {
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        self.section = Section::Memory;
                     }
-                }
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        self.section = Section::Uefi;
+                    }
+                    _ => {}
+                },
                 _ => match key_event.code {
                     KeyCode::Right | KeyCode::Char('l') => match self.arch {
                         Arch::X86_64 => {
-                            self.arch = Arch::Riscv64;
-                            self.enable_uefi = true;
+                            if INSTALLED_ARCHS.contains(&Arch::Riscv64) {
+                                if INSTALLED_UEFI.contains(&Arch::Riscv64) {
+                                    self.arch = Arch::Riscv64;
+                                    self.enable_uefi = true;
+                                }
+                            } else if INSTALLED_ARCHS.contains(&Arch::Aarch64)
+                                && INSTALLED_UEFI.contains(&Arch::Aarch64)
+                            {
+                                self.arch = Arch::Aarch64;
+                                self.enable_uefi = true;
+                            }
                         }
                         Arch::Aarch64 => {
-                            self.arch = Arch::X86_64;
+                            if INSTALLED_ARCHS.contains(&Arch::X86_64) {
+                                self.arch = Arch::X86_64;
+                            } else if INSTALLED_ARCHS.contains(&Arch::Riscv64)
+                                && INSTALLED_UEFI.contains(&Arch::Riscv64)
+                            {
+                                self.arch = Arch::Riscv64;
+                                self.enable_uefi = true;
+                            }
                         }
                         Arch::Riscv64 => {
-                            self.arch = Arch::Aarch64;
-                            self.enable_uefi = true;
+                            if INSTALLED_ARCHS.contains(&Arch::Aarch64) {
+                                if INSTALLED_UEFI.contains(&Arch::Aarch64) {
+                                    self.arch = Arch::Aarch64;
+                                    self.enable_uefi = true;
+                                }
+                            } else if INSTALLED_ARCHS.contains(&Arch::X86_64) {
+                                self.arch = Arch::X86_64;
+                            }
                         }
                     },
                     KeyCode::Left | KeyCode::Char('h') => match self.arch {
                         Arch::X86_64 => {
-                            self.arch = Arch::Aarch64;
-                            self.enable_uefi = true;
+                            if INSTALLED_ARCHS.contains(&Arch::Aarch64) {
+                                if INSTALLED_UEFI.contains(&Arch::Aarch64) {
+                                    self.arch = Arch::Aarch64;
+                                    self.enable_uefi = true;
+                                }
+                            } else if INSTALLED_ARCHS.contains(&Arch::Riscv64)
+                                && INSTALLED_UEFI.contains(&Arch::Riscv64)
+                            {
+                                self.arch = Arch::Riscv64;
+                                self.enable_uefi = true;
+                            }
                         }
                         Arch::Aarch64 => {
-                            self.arch = Arch::Riscv64;
-                            self.enable_uefi = true;
+                            if INSTALLED_ARCHS.contains(&Arch::Riscv64) {
+                                if INSTALLED_UEFI.contains(&Arch::Riscv64) {
+                                    self.arch = Arch::Riscv64;
+                                    self.enable_uefi = true;
+                                }
+                            } else if INSTALLED_ARCHS.contains(&Arch::X86_64) {
+                                self.arch = Arch::X86_64;
+                            }
                         }
                         Arch::Riscv64 => {
-                            self.arch = Arch::X86_64;
+                            if INSTALLED_ARCHS.contains(&Arch::X86_64) {
+                                self.arch = Arch::X86_64;
+                            } else if INSTALLED_ARCHS.contains(&Arch::Aarch64)
+                                && INSTALLED_UEFI.contains(&Arch::Aarch64)
+                            {
+                                self.arch = Arch::Aarch64;
+                                self.enable_uefi = true;
+                            }
                         }
                     },
                     KeyCode::Up | KeyCode::Char('k') => {
@@ -196,7 +297,7 @@ impl Hardware {
                 },
             },
             Section::Uefi => {
-                if os == Some(LinuxDistro::TempleOS) {
+                if os == Some(Os::TempleOS) {
                     match key_event.code {
                         KeyCode::Up | KeyCode::Char('k') => {
                             self.section = Section::Arch;
@@ -214,7 +315,9 @@ impl Hardware {
                         | KeyCode::Char('h')
                             if self.arch == Arch::X86_64 =>
                         {
-                            self.enable_uefi = !self.enable_uefi;
+                            if INSTALLED_UEFI.contains(&Arch::X86_64) {
+                                self.enable_uefi = !self.enable_uefi;
+                            }
                         }
                         KeyCode::Up | KeyCode::Char('k') => {
                             self.section = Section::Arch;
@@ -233,7 +336,7 @@ impl Hardware {
         &self,
         frame: &mut Frame,
         area: Rect,
-        os: Option<LinuxDistro>,
+        os: Option<Os>,
         cancel_confirmation_popup: bool,
     ) {
         let (cpu_block, memory_block, arch_block, uefi_block) = {
@@ -337,7 +440,7 @@ impl Hardware {
             Span::from(" ".repeat(6)),
             Span::from({
                 if self.arch == Arch::X86_64 {
-                    if os == Some(LinuxDistro::TempleOS) {
+                    if os == Some(Os::TempleOS) || !INSTALLED_UEFI.contains(&Arch::X86_64) {
                         "[x] BIOS"
                     } else if self.enable_uefi {
                         "[x] UEFI        [ ] BIOS"

@@ -7,9 +7,9 @@ use crate::{
     Arch, BootOption,
     access::{RemoteAccess, vnc::VNC},
     cloudinit::Cloudinit,
-    distro::{LinuxDistro, debian::DebianRelease, ubuntu::UbuntuRelease},
     event::Event,
     network,
+    os::{Os, debian::DebianRelease, ubuntu::UbuntuRelease},
     vmbuilder::VMBuildData,
 };
 use crossterm::event::{KeyCode, KeyEvent};
@@ -45,7 +45,7 @@ pub struct UserInputField {
 pub struct Quick {
     section: Section,
     name: UserInputField,
-    os: LinuxDistro,
+    os: Os,
     vcpu: UserInputField,
     memory: UserInputField,
     username: UserInputField,
@@ -59,7 +59,7 @@ impl Default for Quick {
         Self {
             section: Section::default(),
             name: UserInputField::default(),
-            os: LinuxDistro::default(),
+            os: Os::default(),
             vcpu: UserInputField {
                 field: Input::from("1"),
                 error: None,
@@ -90,7 +90,7 @@ impl Quick {
     pub fn name(&self) -> String {
         self.name.field.value().to_string()
     }
-    pub fn os(&self) -> LinuxDistro {
+    pub fn os(&self) -> Os {
         self.os
     }
 
@@ -179,26 +179,26 @@ impl Quick {
                 }
                 Section::Os => match key_event.code {
                     KeyCode::Left | KeyCode::Char('h') => match self.os {
-                        LinuxDistro::Debian(_) => {
-                            self.os = LinuxDistro::Ubuntu(UbuntuRelease::default());
+                        Os::Debian(_) => {
+                            self.os = Os::Ubuntu(UbuntuRelease::default());
                         }
-                        LinuxDistro::Ubuntu(_) => {
-                            self.os = LinuxDistro::ArchLinux;
+                        Os::Ubuntu(_) => {
+                            self.os = Os::ArchLinux;
                         }
-                        LinuxDistro::ArchLinux => {
-                            self.os = LinuxDistro::Debian(DebianRelease::default());
+                        Os::ArchLinux => {
+                            self.os = Os::Debian(DebianRelease::default());
                         }
                         _ => {}
                     },
                     KeyCode::Right | KeyCode::Char('l') => match self.os {
-                        LinuxDistro::Debian(_) => {
-                            self.os = LinuxDistro::ArchLinux;
+                        Os::Debian(_) => {
+                            self.os = Os::ArchLinux;
                         }
-                        LinuxDistro::Ubuntu(_) => {
-                            self.os = LinuxDistro::Debian(DebianRelease::default());
+                        Os::Ubuntu(_) => {
+                            self.os = Os::Debian(DebianRelease::default());
                         }
-                        LinuxDistro::ArchLinux => {
-                            self.os = LinuxDistro::Ubuntu(UbuntuRelease::default());
+                        Os::ArchLinux => {
+                            self.os = Os::Ubuntu(UbuntuRelease::default());
                         }
                         _ => {}
                     },
@@ -206,7 +206,7 @@ impl Quick {
                 },
                 Section::Release => match key_event.code {
                     KeyCode::Right | KeyCode::Char('l') => match self.os {
-                        LinuxDistro::Debian(_) => match self.debian_release {
+                        Os::Debian(_) => match self.debian_release {
                             DebianRelease::Trixie => {
                                 self.debian_release = DebianRelease::Bookworm;
                             }
@@ -217,7 +217,7 @@ impl Quick {
                                 self.debian_release = DebianRelease::Trixie;
                             }
                         },
-                        LinuxDistro::Ubuntu(_) => match self.ubuntu_release {
+                        Os::Ubuntu(_) => match self.ubuntu_release {
                             UbuntuRelease::Resolute => {
                                 self.ubuntu_release = UbuntuRelease::Noble;
                             }
@@ -231,7 +231,7 @@ impl Quick {
                         _ => {}
                     },
                     KeyCode::Left | KeyCode::Char('h') => match self.os {
-                        LinuxDistro::Debian(_) => match self.debian_release {
+                        Os::Debian(_) => match self.debian_release {
                             DebianRelease::Trixie => {
                                 self.debian_release = DebianRelease::Forky;
                             }
@@ -242,7 +242,7 @@ impl Quick {
                                 self.debian_release = DebianRelease::Bookworm;
                             }
                         },
-                        LinuxDistro::Ubuntu(_) => match self.ubuntu_release {
+                        Os::Ubuntu(_) => match self.ubuntu_release {
                             UbuntuRelease::Resolute => {
                                 self.ubuntu_release = UbuntuRelease::Jammy;
                             }
@@ -497,12 +497,12 @@ impl Quick {
             Span::from(" ".repeat(5)),
             Span::from({
                 match self.os {
-                    LinuxDistro::Ubuntu(_) => format!(
+                    Os::Ubuntu(_) => format!(
                         "< {} - {} >",
                         self.ubuntu_release,
                         self.ubuntu_release.get_number()
                     ),
-                    LinuxDistro::Debian(_) => {
+                    Os::Debian(_) => {
                         format!(
                             "< {} - {} >",
                             self.debian_release, self.debian_release as u8,

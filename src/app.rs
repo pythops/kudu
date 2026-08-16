@@ -20,13 +20,58 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, HighlightSpacing, List, ListItem, ListState},
 };
 
-use crate::KVM_ENABLED;
 use crate::confirmation::delete::DeleteConfirmation;
+use crate::firmware::uefi_package;
 use crate::vmedit::EditVM;
 use crate::{
     Arch, event::Event, get_kudu_data_dir, get_kudu_run_dir, help::Help,
     notification::Notification, vm::VM, vmbuilder::VMBuilder,
 };
+use crate::{KVM_ENABLED, firmware};
+use lazy_static::lazy_static;
+
+lazy_static! {
+    pub static ref INSTALLED_ARCHS: Vec<Arch> = {
+        let mut available_archs = Vec::new();
+        if which("qemu-system-x86_64").is_ok() {
+            available_archs.push(Arch::X86_64);
+        }
+
+        if which("qemu-system-aarch64").is_ok() {
+            available_archs.push(Arch::Aarch64);
+        }
+        if which("qemu-system-riscv64").is_ok() {
+            available_archs.push(Arch::Riscv64);
+        }
+        available_archs
+    };
+    pub static ref INSTALLED_UEFI: Vec<Arch> = {
+        let mut installed = Vec::new();
+
+        if let Ok((uefi, vars)) = firmware::get_uefi_file_path(Arch::X86_64)
+            && uefi.exists()
+            && vars.exists()
+        {
+            installed.push(Arch::X86_64);
+        }
+
+        if let Ok((uefi, vars)) = firmware::get_uefi_file_path(Arch::Aarch64)
+            && uefi.exists()
+            && vars.exists()
+        {
+            installed.push(Arch::Aarch64);
+        }
+
+        if let Ok((uefi, vars)) = firmware::get_uefi_file_path(Arch::Riscv64)
+            && uefi.exists()
+            && vars.exists()
+        {
+            installed.push(Arch::Riscv64);
+        }
+
+        installed
+    };
+}
 
 #[derive(Debug, Default, PartialEq)]
 pub enum FocusedSection {
@@ -56,8 +101,6 @@ pub struct App {
     pub new_vm: Option<VMBuilder>,
     pub edit_vm: Option<EditVM>,
     pub vm_list_state: ListState,
-    pub available_uefi: Vec<Arch>,
-    pub available_archs: Vec<Arch>,
     pub kvm_version: Result<u8>,
     total_memory: Result<usize>,
     pub delete_confirmation: Option<DeleteConfirmation>,
@@ -132,38 +175,7 @@ impl App {
             ListState::default()
         };
 
-        let mut available_archs = Vec::new();
-        let mut available_uefi = Vec::new();
-
-        if which("qemu-system-x86_64").is_ok() {
-            available_archs.push(Arch::X86_64);
-            if let Ok((uefi, vars)) = VM::get_uefi_file_path(Arch::X86_64)
-                && uefi.exists()
-                && vars.exists()
-            {
-                available_uefi.push(Arch::X86_64);
-            }
-        }
-        if which("qemu-system-aarch64").is_ok() {
-            available_archs.push(Arch::Aarch64);
-            if let Ok((uefi, vars)) = VM::get_uefi_file_path(Arch::Aarch64)
-                && uefi.exists()
-                && vars.exists()
-            {
-                available_uefi.push(Arch::Aarch64);
-            }
-        }
-        if which("qemu-system-riscv64").is_ok() {
-            available_archs.push(Arch::Riscv64);
-            if let Ok((uefi, vars)) = VM::get_uefi_file_path(Arch::Riscv64)
-                && uefi.exists()
-                && vars.exists()
-            {
-                available_uefi.push(Arch::Riscv64);
-            }
-        }
-
-        if available_archs.is_empty() {
+        if INSTALLED_ARCHS.is_empty() {
             return Err(anyhow!(
                 "Qemu is not installed.\n\
                 Please install one of the packages:\n\
@@ -171,6 +183,20 @@ impl App {
                 qemu-system-aarch64\n\
                 qemu-system-riscv"
             ));
+        }
+
+        match INSTALLED_ARCHS.as_slice() {
+            [Arch::Aarch64] if !INSTALLED_UEFI.contains(&Arch::Aarch64) => {
+                if let Ok(package) = uefi_package(Arch::Aarch64) {
+                    return Err(anyhow!(format!("Please install the {} package", package)));
+                }
+            }
+            [Arch::Riscv64] if !INSTALLED_UEFI.contains(&Arch::Riscv64) => {
+                if let Ok(package) = uefi_package(Arch::Riscv64) {
+                    return Err(anyhow!(format!("Please install the {} package", package)));
+                }
+            }
+            _ => {}
         }
 
         which("xorriso").with_context(|| "Please install xorriso package.")?;
@@ -190,8 +216,6 @@ impl App {
             new_vm: None,
             edit_vm: None,
             vm_list_state,
-            available_archs,
-            available_uefi,
             kvm_version,
             total_memory: App::get_total_memory(),
             delete_confirmation: None,
@@ -259,21 +283,21 @@ impl App {
                 Span::from("x86_64 "),
                 Span::from("  "),
                 {
-                    if self.available_archs.contains(&Arch::X86_64) {
+                    if INSTALLED_ARCHS.contains(&Arch::X86_64) {
                         Span::from("qemu-system-x86_64    ").green()
                     } else {
                         Span::from("qemu-system-x86_64    ").red()
                     }
                 },
                 {
-                    if self.available_uefi.contains(&Arch::X86_64) {
+                    if INSTALLED_UEFI.contains(&Arch::X86_64) {
                         Span::from(" UEFI   ").green()
                     } else {
                         Span::from(" UEFI   ").red()
                     }
                 },
                 {
-                    if self.available_archs.contains(&Arch::X86_64) {
+                    if INSTALLED_ARCHS.contains(&Arch::X86_64) {
                         Span::from(" BIOS   ").green()
                     } else {
                         Span::from(" BIOS   ").red()
@@ -284,14 +308,14 @@ impl App {
                 Span::from("aarch64"),
                 Span::from("  "),
                 {
-                    if self.available_archs.contains(&Arch::Aarch64) {
+                    if INSTALLED_ARCHS.contains(&Arch::Aarch64) {
                         Span::from("qemu-system-aarch64   ").green()
                     } else {
                         Span::from("qemu-system-aarch64   ").red()
                     }
                 },
                 {
-                    if self.available_uefi.contains(&Arch::Aarch64) {
+                    if INSTALLED_UEFI.contains(&Arch::Aarch64) {
                         Span::from(" UEFI  ").green()
                     } else {
                         Span::from(" UEFI  ").red()
@@ -302,14 +326,14 @@ impl App {
                 Span::from("riscv64"),
                 Span::from("  "),
                 {
-                    if self.available_archs.contains(&Arch::Riscv64) {
+                    if INSTALLED_ARCHS.contains(&Arch::Riscv64) {
                         Span::from("qemu-system-riscv64   ").green()
                     } else {
                         Span::from("qemu-system-riscv64   ").red()
                     }
                 },
                 {
-                    if self.available_uefi.contains(&Arch::Riscv64) {
+                    if INSTALLED_UEFI.contains(&Arch::Riscv64) {
                         Span::from(" UEFI  ").green()
                     } else {
                         Span::from(" UEFI  ").red()

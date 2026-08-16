@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, thread, time::Duration};
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -27,6 +27,11 @@ fn main() -> Result<()> {
         .about(crate_description!())
         .version(crate_version!())
         .get_matches();
+
+    if std::env::consts::OS != "linux" {
+        println!("kudu only runs on Linux");
+        return Ok(());
+    }
 
     let backend = CrosstermBackend::new(io::stdout());
     let terminal = Terminal::new(backend)?;
@@ -114,6 +119,7 @@ fn main() -> Result<()> {
                                 .push(format!("{} - Downloading cloud image {}%", date, progress));
 
                             if progress == 100 {
+                                thread::sleep(Duration::from_secs(1));
                                 let _ = vm.start(tui.events.sender.clone());
                             }
                         }

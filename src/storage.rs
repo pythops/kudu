@@ -46,6 +46,20 @@ impl Drive {
         Ok(output["virtual-size"].as_u64().unwrap() / (1024 * 1024 * 1024))
     }
 
+    pub fn format(path: &Path) -> Result<Format> {
+        let output = Command::new("qemu-img")
+            .arg("info")
+            .arg("--output")
+            .arg("json")
+            .arg(path)
+            .output()?;
+
+        let output = String::from_utf8(output.stdout)?;
+        let output: Value = serde_json::from_str(&output)?;
+        let format = output["format"].as_str().unwrap();
+        Ok(Format::from(format))
+    }
+
     pub fn to_qemu_arg(&self) -> String {
         let mut args = Vec::new();
 
@@ -130,6 +144,15 @@ pub enum Format {
     #[default]
     Qcow2,
     Raw,
+}
+
+impl From<&str> for Format {
+    fn from(value: &str) -> Self {
+        match value {
+            "qcow2" => Format::Qcow2,
+            _ => Format::Raw,
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
