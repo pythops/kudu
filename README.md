@@ -2,6 +2,8 @@
   <h2> Easily manage VMs on Linux </h2>
 </div>
 
+![](https://github.com/user-attachments/assets/b3a27059-df89-4d07-ac50-871bc4df3522)
+
 ## Prerequisites
 
 - A Linux based OS.
