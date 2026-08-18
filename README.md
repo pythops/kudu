@@ -2,7 +2,7 @@
   <h2> Easily manage VMs on Linux </h2>
 </div>
 
-![](https://github.com/user-attachments/assets/b3a27059-df89-4d07-ac50-871bc4df3522)
+![](https://github.com/user-attachments/assets/2331028e-741c-4689-9777-fb74fd72b345)
 
 ## Description
 
