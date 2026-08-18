@@ -4,6 +4,10 @@
 
 ![](https://github.com/user-attachments/assets/b3a27059-df89-4d07-ac50-871bc4df3522)
 
+## Description
+
+`kudu` is a TUI for creating and managing QEMU VMs. It is an alternative to GUIs like `virt-manager` or `GNOME boxes` and as opposed to these, it does not rely on libvirt
+
 ## Prerequisites
 
 - A Linux based OS.
@@ -12,7 +16,7 @@
   - `qemu-system-aarch64`
   - `qemu-system-riscv`
 - `xorriso` for cloudinit
-- uefi firmware package
+- uefi firmware package (Optional for x86_64)
 
   |             | Debian/Ubuntu    | Arch (btw)   | Fedora       |
   | ----------- | ---------------- | ------------ | ------------ |
@@ -44,9 +48,11 @@ $ kudu
 
 ##### Q: KVM shows Disabled or Unavailable.
 
-Make sure the `kvm` kernel module is loaded if you are have Intel/AMD processor.
+Make sure the `kvm` kernel module is loaded if you have Intel/AMD processor.
 
-if you run `kudu` as regular user, make sure your user belongs to `kvm` group.
+if you run `kudu` as regular user, make sure your user belongs to `kvm` group. otherwise run `kudu` with sudo.
+
+`kudu` still runs fine even if kvm is not available.
 
 ## Contributing
 
