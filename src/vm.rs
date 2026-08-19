@@ -114,7 +114,7 @@ impl VM {
     pub fn preview(&self, sender: Sender<Event>) {
         if which("vncviewer").is_err() {
             let error = Text::from(vec![
-                Line::from("vncviwer not found"),
+                Line::from("vncviewer not found"),
                 Line::from("Please install tigervnc package"),
             ]);
 
