@@ -1,14 +1,14 @@
 use anyhow::Result;
-use std::{mem::discriminant, sync::mpsc::Sender};
+use std::sync::mpsc::Sender;
 
 use crossterm::event::{KeyCode, KeyEvent};
 
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
+    layout::{Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span, Text},
-    widgets::{Block, BorderType, Borders, Clear, List, Padding},
+    widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState},
 };
 
 use crate::{
@@ -33,6 +33,7 @@ pub enum Section {
 #[derive(Debug, Clone)]
 pub struct Advanced {
     pub focused_section: Section,
+    section_state: ListState,
     pub overview: overview::Overview,
     pub hardware: hardware::Hardware,
     pub storage: storage::Storage,
@@ -54,6 +55,7 @@ impl Advanced {
 
         Self {
             focused_section: Section::Overview,
+            section_state: ListState::default().with_selected(Some(0)),
             overview: overview::Overview::new(),
             hardware: hardware::Hardware::new(),
             storage: storage::Storage::new(),
@@ -199,99 +201,51 @@ impl Advanced {
         Ok(())
     }
 
-    fn title_span(&self, section: Section) -> Span<'_> {
-        let is_focused = discriminant(&self.focused_section) == discriminant(&section);
-        match section {
-            Section::Overview => {
-                if is_focused {
-                    Span::styled(
-                        "   Overview     ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("   Overview     ").fg(Color::DarkGray)
-                }
-            }
-            Section::Hardware => {
-                if is_focused {
-                    Span::styled(
-                        "  Hardware    ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("  Hardware    ").fg(Color::DarkGray)
-                }
-            }
-            Section::Storage => {
-                if is_focused {
-                    Span::styled(
-                        "   Storage 󱛟   ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("   Storage 󱛟   ").fg(Color::DarkGray)
-                }
-            }
-            Section::Network => {
-                if is_focused {
-                    Span::styled(
-                        "  Network 󰛳    ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("  Network 󰛳    ").fg(Color::DarkGray)
-                }
-            }
-            Section::PortForwarding => {
-                if is_focused {
-                    Span::styled(
-                        " Port Forwaring   ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from(" Port Forwaring   ").fg(Color::DarkGray)
-                }
-            }
-            Section::RemoteAccess => {
-                if is_focused {
-                    Span::styled(
-                        " Remote Access 󰢹 ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from(" Remote Access 󰢹 ").fg(Color::DarkGray)
-                }
-            }
-            Section::Summary => {
-                if is_focused {
-                    Span::styled(
-                        "  Summary  󱇗   ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("  Summary  󱇗   ").fg(Color::DarkGray)
-                }
-            }
-        }
-    }
-    fn render_header(&self, frame: &mut Frame, block: Rect) {
-        frame.render_widget(
-            Block::default()
-                .title({
-                    Line::from(vec![
-                        self.title_span(Section::Overview),
-                        self.title_span(Section::Hardware),
-                        self.title_span(Section::Storage),
-                        self.title_span(Section::Network),
-                        self.title_span(Section::PortForwarding),
-                        self.title_span(Section::RemoteAccess),
-                        self.title_span(Section::Summary),
-                    ])
-                })
-                .title_alignment(Alignment::Center)
-                .padding(Padding::top(1)),
-            block,
-        );
+    fn render_header(&mut self, frame: &mut Frame, block: Rect) {
+        self.section_state
+            .select(Some(self.focused_section.clone() as usize));
+        let sections = vec![
+            ListItem::new(vec![
+                Line::from(""),
+                Line::from(" Overview   "),
+                Line::from(""),
+            ]),
+            ListItem::new(vec![
+                Line::from(""),
+                Line::from(" Hardware   "),
+                Line::from(""),
+            ]),
+            ListItem::new(vec![
+                Line::from(""),
+                Line::from(" Storage 󱛟  "),
+                Line::from(""),
+            ]),
+            ListItem::new(vec![
+                Line::from(""),
+                Line::from(" Network 󰛳  "),
+                Line::from(""),
+            ]),
+            ListItem::new(vec![
+                Line::from(""),
+                Line::from(" Port Forwaring   "),
+                Line::from(""),
+            ]),
+            ListItem::new(vec![
+                Line::from(""),
+                Line::from(" Remote Access 󰢹  "),
+                Line::from(""),
+            ]),
+            ListItem::new(vec![
+                Line::from(""),
+                Line::from(" Summary  󱇗  "),
+                Line::from(""),
+            ]),
+        ];
+
+        let list = List::new(sections)
+            .highlight_style(Style::default().bg(Color::Yellow).fg(Color::Black).bold());
+
+        frame.render_stateful_widget(list, block, &mut self.section_state);
     }
 
     pub fn render(&mut self, frame: &mut Frame, cancel_popup: bool) {
@@ -344,8 +298,8 @@ impl Advanced {
 
         let (section_block, area) = {
             let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Length(1), Constraint::Fill(1)])
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Length(20), Constraint::Fill(1)])
                 .flex(ratatui::layout::Flex::SpaceBetween)
                 .split(area);
 
@@ -368,6 +322,7 @@ impl Advanced {
             Section::Overview => {
                 self.overview.render(frame, area, cancel_popup);
             }
+
             Section::Hardware => {
                 self.hardware
                     .render(frame, area, self.overview.os(), cancel_popup);

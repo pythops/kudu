@@ -206,7 +206,6 @@ impl VncBuilder {
                     Constraint::Length(4),
                     Constraint::Length(4),
                 ])
-                .margin(2)
                 .split(area);
 
             (chunks[0], chunks[1], chunks[2], chunks[3])
@@ -305,13 +304,13 @@ impl VncBuilder {
             if !cancel_confirmation_popup {
                 match self.section {
                     Section::Host if self.host.field.visual_cursor() < 50 => {
-                        let x = area.x + self.host.field.visual_cursor() as u16 + 16;
-                        let y = area.y + 10;
+                        let x = area.x + self.host.field.visual_cursor() as u16 + 14;
+                        let y = area.y + 8;
                         frame.set_cursor_position((x, y));
                     }
                     Section::Password if self.password.field.visual_cursor() <= 50 => {
-                        let x = area.x + self.password.field.visual_cursor() as u16 + 16;
-                        let y = area.y + 14;
+                        let x = area.x + self.password.field.visual_cursor() as u16 + 14;
+                        let y = area.y + 12;
                         frame.set_cursor_position((x, y));
                     }
                     _ => {}

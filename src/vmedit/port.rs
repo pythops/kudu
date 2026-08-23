@@ -152,10 +152,6 @@ impl PortForwarding {
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
         let vm_mappings = self.mappings();
-        let area = area.inner(Margin {
-            horizontal: 2,
-            vertical: 2,
-        });
 
         if vm_mappings.is_empty() && self.added_port_mappings.is_empty() {
             let message = Text::from("Press n to set up port forwading").centered();

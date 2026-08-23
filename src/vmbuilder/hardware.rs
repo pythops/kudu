@@ -348,7 +348,7 @@ impl Hardware {
                     Constraint::Length(4),
                     Constraint::Length(4),
                 ])
-                .margin(2)
+                .margin(1)
                 .split(area);
 
             (chunks[0], chunks[1], chunks[2], chunks[3])
@@ -461,13 +461,13 @@ impl Hardware {
         if !cancel_confirmation_popup {
             match self.section {
                 Section::Cpu if self.vcpu.field.visual_cursor() < 50 => {
-                    let x = area.x + self.vcpu.field.visual_cursor() as u16 + 16;
-                    let y = area.y + 2;
+                    let x = area.x + self.vcpu.field.visual_cursor() as u16 + 15;
+                    let y = area.y + 1;
                     frame.set_cursor_position((x, y));
                 }
                 Section::Memory if self.memory.field.visual_cursor() < 50 => {
-                    let x = area.x + self.memory.field.visual_cursor() as u16 + 16;
-                    let y = area.y + 6;
+                    let x = area.x + self.memory.field.visual_cursor() as u16 + 15;
+                    let y = area.y + 5;
                     frame.set_cursor_position((x, y));
                 }
                 _ => {}

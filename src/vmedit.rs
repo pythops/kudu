@@ -1,7 +1,7 @@
 pub mod network;
 pub mod port;
 use anyhow::Result;
-use std::{cell::RefCell, mem::discriminant, path::PathBuf, rc::Rc, sync::mpsc::Sender};
+use std::{cell::RefCell, path::PathBuf, rc::Rc, sync::mpsc::Sender};
 
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -10,7 +10,9 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span, Text},
-    widgets::{Block, BorderType, Borders, Clear, Padding, Row, Table, TableState},
+    widgets::{
+        Block, BorderType, Borders, Clear, List, ListItem, ListState, Row, Table, TableState,
+    },
 };
 use tui_input::{Input, backend::crossterm::EventHandler};
 
@@ -29,6 +31,7 @@ struct UserInputField {
     error: Option<String>,
 }
 
+#[repr(u8)]
 #[derive(Debug, Clone, PartialEq)]
 enum Section {
     Hardware(HardwareSection),
@@ -36,6 +39,18 @@ enum Section {
     Network,
     PortForwarding,
     RemoteAccess,
+}
+
+impl Section {
+    pub fn as_usize(&self) -> usize {
+        match self {
+            Section::Hardware(_) => 0,
+            Section::Storage => 1,
+            Section::Network => 2,
+            Section::PortForwarding => 3,
+            Section::RemoteAccess => 4,
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -48,6 +63,7 @@ pub enum HardwareSection {
 #[derive(Debug, Clone)]
 pub struct EditVM {
     section: Section,
+    section_state: ListState,
     vcpu: UserInputField,
     memory: UserInputField,
     disk_state: TableState,
@@ -92,6 +108,8 @@ impl EditVM {
         let networks = Rc::new(RefCell::new(vm.networks.clone()));
 
         Self {
+            section: Section::Hardware(HardwareSection::Cpu),
+            section_state: ListState::default().with_selected(Some(0)),
             vcpu: UserInputField {
                 field: Input::from(vm.vcpu.to_string()),
                 error: None,
@@ -102,7 +120,6 @@ impl EditVM {
             },
             disk_state,
             new_disk: None,
-            section: Section::Hardware(HardwareSection::Cpu),
             added_disks: Vec::new(),
             deleted_disks: Vec::new(),
             network: network::NetworkEdit::new(networks.clone()),
@@ -341,77 +358,41 @@ impl EditVM {
         Ok(())
     }
 
-    fn title_span(&self, section: Section) -> Span<'_> {
-        let is_focused = discriminant(&self.section) == discriminant(&section);
-        match section {
-            Section::Hardware(_) => {
-                if is_focused {
-                    Span::styled(
-                        "  Hardware    ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("  Hardware    ").fg(Color::DarkGray)
-                }
-            }
-            Section::Storage => {
-                if is_focused {
-                    Span::styled(
-                        "   Storage 󱛟   ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("   Storage 󱛟   ").fg(Color::DarkGray)
-                }
-            }
-            Section::Network => {
-                if is_focused {
-                    Span::styled(
-                        "  Network 󰛳    ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("  Network 󰛳    ").fg(Color::DarkGray)
-                }
-            }
-            Section::PortForwarding => {
-                if is_focused {
-                    Span::styled(
-                        " Port Forwaring   ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from(" Port Forwaring   ").fg(Color::DarkGray)
-                }
-            }
-            Section::RemoteAccess => {
-                if is_focused {
-                    Span::styled(
-                        " Remote Access 󰢹 ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from(" Remote Access 󰢹 ").fg(Color::DarkGray)
-                }
-            }
-        }
-    }
-    fn render_header(&self, frame: &mut Frame, block: Rect) {
-        frame.render_widget(
-            Block::default()
-                .title({
-                    Line::from(vec![
-                        self.title_span(Section::Hardware(HardwareSection::default())),
-                        self.title_span(Section::Storage),
-                        self.title_span(Section::Network),
-                        self.title_span(Section::PortForwarding),
-                        self.title_span(Section::RemoteAccess),
-                    ])
-                })
-                .title_alignment(Alignment::Center)
-                .padding(Padding::top(1)),
-            block,
-        );
+    fn render_header(&mut self, frame: &mut Frame, block: Rect) {
+        self.section_state.select(Some(self.section.as_usize()));
+
+        let sections = vec![
+            ListItem::new(vec![
+                Line::from(""),
+                Line::from(" Hardware   "),
+                Line::from(""),
+            ]),
+            ListItem::new(vec![
+                Line::from(""),
+                Line::from(" Storage 󱛟  "),
+                Line::from(""),
+            ]),
+            ListItem::new(vec![
+                Line::from(""),
+                Line::from(" Network 󰛳  "),
+                Line::from(""),
+            ]),
+            ListItem::new(vec![
+                Line::from(""),
+                Line::from(" Port Forwaring   "),
+                Line::from(""),
+            ]),
+            ListItem::new(vec![
+                Line::from(""),
+                Line::from(" Remote Access 󰢹  "),
+                Line::from(""),
+            ]),
+        ];
+
+        let list = List::new(sections)
+            .highlight_style(Style::default().bg(Color::Yellow).fg(Color::Black).bold());
+
+        frame.render_stateful_widget(list, block, &mut self.section_state);
     }
 
     pub fn render(&mut self, frame: &mut Frame) {
@@ -419,7 +400,7 @@ impl EditVM {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(30),
+                Constraint::Length(40),
                 Constraint::Fill(1),
             ])
             .margin(1)
@@ -429,7 +410,7 @@ impl EditVM {
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(120),
+                Constraint::Length(130),
                 Constraint::Fill(1),
             ])
             .margin(1)
@@ -452,14 +433,14 @@ impl EditVM {
         );
 
         let area = area.inner(Margin {
-            horizontal: 3,
+            horizontal: 5,
             vertical: 2,
         });
 
         let (section_block, area) = {
             let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Length(1), Constraint::Fill(1)])
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Length(20), Constraint::Fill(1)])
                 .flex(ratatui::layout::Flex::SpaceBetween)
                 .split(area);
 
@@ -468,13 +449,27 @@ impl EditVM {
 
         self.render_header(frame, section_block);
 
+        let area = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Fill(1),
+                Constraint::Length(80),
+                Constraint::Fill(1),
+            ])
+            .flex(ratatui::layout::Flex::Center)
+            .split(area)[1];
+
+        let area = area.inner(Margin {
+            horizontal: 0,
+            vertical: 1,
+        });
+
         match &self.section {
             Section::Hardware(hardware_section) => {
                 let (cpu_block, memory_block) = {
                     let chunks = Layout::default()
                         .direction(Direction::Vertical)
                         .constraints([Constraint::Length(4), Constraint::Length(4)])
-                        .margin(2)
                         .split(area);
 
                     (chunks[0], chunks[1])
@@ -548,24 +543,19 @@ impl EditVM {
 
                 match hardware_section {
                     HardwareSection::Cpu if self.vcpu.field.visual_cursor() < 50 => {
-                        let x = area.x + self.vcpu.field.visual_cursor() as u16 + 16;
-                        let y = area.y + 2;
+                        let x = area.x + self.vcpu.field.visual_cursor() as u16 + 14;
+                        let y = area.y;
                         frame.set_cursor_position((x, y));
                     }
                     HardwareSection::Memory if self.memory.field.visual_cursor() < 50 => {
-                        let x = area.x + self.memory.field.visual_cursor() as u16 + 16;
-                        let y = area.y + 6;
+                        let x = area.x + self.memory.field.visual_cursor() as u16 + 14;
+                        let y = area.y + 4;
                         frame.set_cursor_position((x, y));
                     }
                     _ => {}
                 }
             }
             Section::Storage => {
-                let area = area.inner(Margin {
-                    horizontal: 2,
-                    vertical: 2,
-                });
-
                 // disks
                 let widths = [
                     Constraint::Length(5),
@@ -647,14 +637,7 @@ impl EditVM {
                     .row_highlight_style(Style::new().on_dark_gray())
                     .column_spacing(1);
 
-                frame.render_stateful_widget(
-                    disks,
-                    area.inner(Margin {
-                        horizontal: 0,
-                        vertical: 2,
-                    }),
-                    &mut self.disk_state,
-                );
+                frame.render_stateful_widget(disks, area, &mut self.disk_state);
 
                 if let Some(new_disk) = &self.new_disk {
                     new_disk.render(frame);
@@ -693,7 +676,7 @@ impl EditVM {
                 ])]
             }
             _ => {
-                if self.new_disk.is_some() | self.port_forwarding.new_mapping_popup() {
+                if self.new_popup() {
                     vec![Line::from(vec![
                         Span::from("k,↑").bold(),
                         Span::from("  Up"),

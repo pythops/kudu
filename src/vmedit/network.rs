@@ -125,18 +125,13 @@ impl NetworkEdit {
     }
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
-        let area = area.inner(Margin {
-            horizontal: 2,
-            vertical: 2,
-        });
-
         if self.initial_networks.is_empty() && self.added_networks.is_empty() {
             let message = Text::from("Press n to add a network interface").centered();
             frame.render_widget(
                 message,
                 area.inner(Margin {
                     horizontal: 0,
-                    vertical: 3,
+                    vertical: 1,
                 }),
             );
         } else {

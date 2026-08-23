@@ -349,7 +349,7 @@ impl Overview {
                     Constraint::Length(4),
                     Constraint::Length(4),
                 ])
-                .margin(2)
+                .margin(1)
                 .split(area);
 
             (chunks[0], chunks[1], chunks[2], chunks[3], chunks[4])
@@ -532,18 +532,18 @@ impl Overview {
         if !cancel_confirmation_popup {
             match self.section {
                 Section::Name if self.name.field.visual_cursor() < 61 => {
-                    let x = area.x + self.name.field.visual_cursor() as u16 + 16;
-                    let y = area.y + 2;
+                    let x = area.x + self.name.field.visual_cursor() as u16 + 15;
+                    let y = area.y + 1;
                     frame.set_cursor_position((x, y));
                 }
                 Section::LocalFile if self.boot_file.field.visual_cursor() <= 61 => {
-                    let x = area.x + self.boot_file.field.visual_cursor() as u16 + 16;
-                    let y = area.y + 10;
+                    let x = area.x + self.boot_file.field.visual_cursor() as u16 + 15;
+                    let y = area.y + 9;
                     frame.set_cursor_position((x, y));
                 }
                 Section::Cloudinit if self.cloudinit.field.visual_cursor() <= 61 => {
-                    let x = area.x + self.cloudinit.field.visual_cursor() as u16 + 16;
-                    let y = area.y + 18;
+                    let x = area.x + self.cloudinit.field.visual_cursor() as u16 + 15;
+                    let y = area.y + 17;
                     frame.set_cursor_position((x, y));
                 }
                 _ => {}

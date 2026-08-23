@@ -159,7 +159,7 @@ impl NetworkBuilder {
                 message,
                 area.inner(Margin {
                     horizontal: 0,
-                    vertical: 3,
+                    vertical: 1,
                 }),
             );
         } else {
