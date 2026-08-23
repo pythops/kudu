@@ -727,7 +727,7 @@ impl VM {
                             Span::from(format!("{:3}GiB", disk.size.unwrap())),
                             Span::from(" ".repeat(8)),
                             Span::from(disk.format.to_string()),
-                            Span::from(" ".repeat(8)),
+                            Span::from(" ".repeat(7)),
                             Span::from(disk.interface.to_string()),
                         ]))
                     }
@@ -750,7 +750,7 @@ impl VM {
                     lines.push(Line::from(vec![
                         Span::from("Networks").bold().fg(Color::Yellow),
                         Span::from(" ".repeat(9)),
-                        Span::from("  id   ").bold(),
+                        Span::from("id     ").bold(),
                         Span::from(" ".repeat(7)),
                         Span::from("Backend").bold(),
                         Span::from(" ".repeat(4)),

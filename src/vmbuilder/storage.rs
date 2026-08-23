@@ -1,6 +1,6 @@
 use ratatui::{
     Frame,
-    layout::{Constraint, Margin, Rect},
+    layout::{Constraint, Direction, Flex, Layout, Margin, Rect},
     style::{Style, Stylize},
     text::{Line, Span, Text},
     widgets::{ListItem, Row, Table, TableState},
@@ -123,7 +123,7 @@ impl Storage {
                         Span::from(format!("{:3}GiB", disk.size)),
                         Span::from(" ".repeat(8)),
                         Span::from(disk.format.to_string()),
-                        Span::from(" ".repeat(8)),
+                        Span::from(" ".repeat(7)),
                         Span::from(disk.interface.to_string()),
                     ]))
                 }
@@ -135,14 +135,18 @@ impl Storage {
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
         if self.disks.is_empty() {
+            let area = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Fill(1),
+                    Constraint::Length(1),
+                    Constraint::Fill(1),
+                ])
+                .flex(Flex::Center)
+                .split(area)[1];
+
             let message = Text::from("Press n to add additional disks").centered();
-            frame.render_widget(
-                message,
-                area.inner(Margin {
-                    horizontal: 0,
-                    vertical: 1,
-                }),
-            );
+            frame.render_widget(message, area);
         } else {
             let widths = [
                 Constraint::Length(5),

@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Margin, Rect},
+    layout::{Constraint, Direction, Flex, Layout, Margin, Rect},
     style::{Style, Stylize},
     text::{Line, Span, Text},
     widgets::{ListItem, Row, Table, TableState},
@@ -168,24 +168,30 @@ impl PortForwaring {
     }
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
         if self.networks.borrow().is_empty() {
+            let area = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Fill(1),
+                    Constraint::Length(1),
+                    Constraint::Fill(1),
+                ])
+                .flex(Flex::Center)
+                .split(area)[1];
             let message =
                 Text::from("Create a network first before setting up port forwarding").centered();
-            frame.render_widget(
-                message,
-                area.inner(Margin {
-                    horizontal: 0,
-                    vertical: 1,
-                }),
-            );
+            frame.render_widget(message, area);
         } else if self.mappings.is_empty() {
-            let message = Text::from("Press n to set up port forwading").centered();
-            frame.render_widget(
-                message,
-                area.inner(Margin {
-                    horizontal: 0,
-                    vertical: 3,
-                }),
-            );
+            let area = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Fill(1),
+                    Constraint::Length(1),
+                    Constraint::Fill(1),
+                ])
+                .flex(Flex::Center)
+                .split(area)[1];
+            let message = Text::from("Press n to set up port forwarding").centered();
+            frame.render_widget(message, area);
         } else {
             let widths = [
                 Constraint::Length(10),

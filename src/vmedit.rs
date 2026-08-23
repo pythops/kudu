@@ -214,6 +214,11 @@ impl EditVM {
             return Ok(());
         }
 
+        if self.network.new_network_popup() {
+            self.network.handle_key_events(key_event);
+            return Ok(());
+        }
+
         if self.port_forwarding.new_mapping_popup() {
             self.port_forwarding.handle_key_events(key_event);
             return Ok(());
@@ -400,7 +405,7 @@ impl EditVM {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(40),
+                Constraint::Length(22),
                 Constraint::Fill(1),
             ])
             .margin(1)

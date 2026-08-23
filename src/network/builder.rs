@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Margin, Rect},
+    layout::{Constraint, Direction, Flex, Layout, Margin, Rect},
     style::{Style, Stylize},
     text::{Line, Span, Text},
     widgets::{Block, BorderType, Borders, Clear, ListItem, Row, Table, TableState},
@@ -134,7 +134,7 @@ impl NetworkBuilder {
                     lines.push(Line::from(vec![
                         Span::from(" ".repeat(20)),
                         Span::from(format!("{:8}", network.id)),
-                        Span::from(" ".repeat(6)),
+                        Span::from(" ".repeat(5)),
                         Span::from(format!("{:7}", network.backend)),
                         Span::from(" ".repeat(6)),
                         Span::from(format!("{:14}", network.nic)),
@@ -154,14 +154,17 @@ impl NetworkBuilder {
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
         let networks = self.networks.borrow();
         if networks.is_empty() {
+            let area = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Fill(1),
+                    Constraint::Length(1),
+                    Constraint::Fill(1),
+                ])
+                .flex(Flex::Center)
+                .split(area)[1];
             let message = Text::from("Press n to add a network interface").centered();
-            frame.render_widget(
-                message,
-                area.inner(Margin {
-                    horizontal: 0,
-                    vertical: 1,
-                }),
-            );
+            frame.render_widget(message, area);
         } else {
             let widths = [
                 Constraint::Length(8),  // id

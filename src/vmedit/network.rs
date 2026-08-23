@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Margin, Rect},
+    layout::{Constraint, Direction, Flex, Layout, Rect},
     style::{Style, Stylize},
     text::Text,
     widgets::{Row, Table, TableState},
@@ -126,14 +126,18 @@ impl NetworkEdit {
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
         if self.initial_networks.is_empty() && self.added_networks.is_empty() {
+            let area = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Fill(1),
+                    Constraint::Length(1),
+                    Constraint::Fill(1),
+                ])
+                .flex(Flex::Center)
+                .split(area)[1];
+
             let message = Text::from("Press n to add a network interface").centered();
-            frame.render_widget(
-                message,
-                area.inner(Margin {
-                    horizontal: 0,
-                    vertical: 1,
-                }),
-            );
+            frame.render_widget(message, area);
         } else {
             let widths = [
                 Constraint::Length(5),

@@ -349,7 +349,6 @@ impl Advanced {
                     let chunks = Layout::default()
                         .direction(Direction::Vertical)
                         .constraints([Constraint::Fill(1), Constraint::Length(3)])
-                        .margin(1)
                         .split(area);
 
                     (chunks[0], chunks[1])
@@ -381,13 +380,7 @@ impl Advanced {
                     .flex(ratatui::layout::Flex::Center)
                     .split(summary_block)[1];
 
-                frame.render_widget(
-                    list,
-                    summary_block.inner(Margin {
-                        horizontal: 0,
-                        vertical: 1,
-                    }),
-                );
+                frame.render_widget(list, summary_block);
 
                 let create_block = Layout::default()
                     .direction(Direction::Horizontal)
@@ -505,13 +498,47 @@ impl Advanced {
                 ])]
             }
             Section::Network => {
-                vec![Line::from(vec![
-                    Span::from("Esc").bold(),
-                    Span::from(" Cancel"),
-                    Span::from(" | "),
-                    Span::from("⇄").bold(),
-                    Span::from(" Nav"),
-                ])]
+                if self.network.new_network_popup() {
+                    vec![Line::from(vec![
+                        Span::from("k,↑").bold(),
+                        Span::from(" Up"),
+                        Span::from(" | "),
+                        Span::from("j,↓").bold(),
+                        Span::from(" Down"),
+                        Span::from(" | "),
+                        Span::from("h,←").bold(),
+                        Span::from(" Left"),
+                        Span::from(" | "),
+                        Span::from("l,→").bold(),
+                        Span::from(" Right"),
+                        Span::from(" | "),
+                        Span::from("Esc").bold(),
+                        Span::from(" Cancel"),
+                        Span::from(" | "),
+                        Span::from("Enter").bold(),
+                        Span::from(" Confirm"),
+                    ])]
+                } else {
+                    vec![Line::from(vec![
+                        Span::from("k,↑").bold(),
+                        Span::from(" Up"),
+                        Span::from(" | "),
+                        Span::from("j,↓").bold(),
+                        Span::from(" Down"),
+                        Span::from(" | "),
+                        Span::from("n").bold(),
+                        Span::from(" Add"),
+                        Span::from(" | "),
+                        Span::from("d").bold(),
+                        Span::from(" Delete"),
+                        Span::from(" | "),
+                        Span::from("Esc").bold(),
+                        Span::from(" Cancel"),
+                        Span::from(" | "),
+                        Span::from("⇄").bold(),
+                        Span::from(" Nav"),
+                    ])]
+                }
             }
             _ => {
                 vec![Line::from(vec![
