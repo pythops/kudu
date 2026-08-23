@@ -6,7 +6,7 @@
 
 ## Description
 
-`kudu` is a TUI for creating and managing QEMU VMs. It is an alternative to GUIs like `virt-manager` or `GNOME boxes` and as opposed to these, it does not rely on libvirt
+`kudu` is a TUI for creating and managing VMs on Linux. It is an alternative to GUIs like `virt-manager` or `GNOME boxes` and as opposed to these, it does not rely on libvirt
 
 ## Prerequisites
 
@@ -16,6 +16,7 @@
   - `qemu-system-aarch64`
   - `qemu-system-riscv`
 - `xorriso` for cloudinit
+- `passt`
 - uefi firmware package (Optional for x86_64)
 
   |             | Debian/Ubuntu    | Arch (btw)   | Fedora       |

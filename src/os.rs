@@ -20,6 +20,7 @@ use crate::{
     Arch,
     event::{DownloadEvent, Event},
     get_kudu_data_dir,
+    vm::VmId,
 };
 
 #[derive(Debug, Clone, PartialEq, Copy, strum::Display, Deserialize, Serialize)]
@@ -73,7 +74,7 @@ impl Os {
 
         path
     }
-    pub fn download(&self, arch: Arch, sender: Sender<Event>, vm_id: uuid::Uuid) -> Result<()> {
+    pub fn download(&self, arch: Arch, sender: Sender<Event>, id: VmId) -> Result<()> {
         let path = self.get_file_path(arch);
 
         let url = match self {
@@ -107,8 +108,8 @@ impl Os {
                 match response.read(&mut buffer) {
                     Ok(n) => {
                         if !content.is_empty() && n == 0 {
-                            let _ = sender
-                                .send(Event::Download((vm_id, DownloadEvent::Progress(100u8))));
+                            let _ =
+                                sender.send(Event::Download((id, DownloadEvent::Progress(100u8))));
                             fs::write(path, content)?;
                             break;
                         }
@@ -122,7 +123,7 @@ impl Os {
                             if let Some(rate) = (content.len() * 100).checked_div(file_size) {
                                 let rate = rate as u8;
                                 let _ = sender
-                                    .send(Event::Download((vm_id, DownloadEvent::Progress(rate))));
+                                    .send(Event::Download((id, DownloadEvent::Progress(rate))));
                             }
 
                             start = now;

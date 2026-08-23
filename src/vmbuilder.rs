@@ -1,7 +1,6 @@
 mod access;
 mod advanced;
 mod hardware;
-mod network;
 mod overview;
 mod port;
 mod quick;
@@ -25,7 +24,7 @@ use crate::{
     access::RemoteAccess,
     confirmation::cancel::CancelConfirmation,
     event::Event::{self},
-    network::{NetworkBackend, PortMapping},
+    network::Network,
     os::Os::{self},
     storage::Disk,
     vmbuilder::{advanced::Advanced, quick::Quick},
@@ -61,10 +60,9 @@ pub struct VMBuildData {
     pub os: Option<Os>,
     pub vcpu: u16,
     pub memory: u32,
-    pub network_backend: NetworkBackend,
+    pub networks: Vec<Network>,
     pub enable_uefi: bool,
     pub disks: Vec<Disk>,
-    pub port_mappings: Vec<PortMapping>,
     pub remote_access: Option<RemoteAccess>,
 }
 
@@ -106,6 +104,11 @@ impl VMBuilder {
 
             if advanced.port_fowrwaring.new_mapping_popup() {
                 advanced.port_fowrwaring.handle_key_events(key_event);
+                return Ok(());
+            }
+
+            if advanced.network.new_network_popup() {
+                advanced.network.handle_key_events(key_event);
                 return Ok(());
             }
         }

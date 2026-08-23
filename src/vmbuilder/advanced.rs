@@ -14,8 +14,9 @@ use ratatui::{
 use crate::{
     Arch,
     event::Event,
+    network,
     os::Os::{ArchLinux, TempleOS},
-    vmbuilder::{VMBuildData, access, hardware, network, overview, port, storage},
+    vmbuilder::{VMBuildData, access, hardware, overview, port, storage},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -35,7 +36,7 @@ pub struct Advanced {
     pub overview: overview::Overview,
     pub hardware: hardware::Hardware,
     pub storage: storage::Storage,
-    pub network: network::Network,
+    pub network: network::builder::NetworkBuilder,
     pub port_fowrwaring: port::PortForwaring,
     pub remote_access: access::RemoteAccessBuilder,
 }
@@ -48,18 +49,21 @@ impl Default for Advanced {
 
 impl Advanced {
     pub fn new() -> Advanced {
+        let network = network::builder::NetworkBuilder::new();
+        let port_fowrwaring = port::PortForwaring::new(network.networks());
+
         Self {
             focused_section: Section::Overview,
             overview: overview::Overview::new(),
             hardware: hardware::Hardware::new(),
             storage: storage::Storage::new(),
-            network: network::Network::new(),
-            port_fowrwaring: port::PortForwaring::new(),
+            network,
+            port_fowrwaring,
             remote_access: access::RemoteAccessBuilder::new(),
         }
     }
 
-    pub fn build(&self) -> VMBuildData {
+    pub fn build(&mut self) -> VMBuildData {
         VMBuildData {
             boot_option: self.overview.boot_option(),
             name: self.overview.name(),
@@ -70,9 +74,8 @@ impl Advanced {
             memory: self.hardware.memory(),
             arch: self.hardware.arch(),
             enable_uefi: self.hardware.enable_uefi(),
-            network_backend: self.network.backend(),
+            networks: self.network.networks().take(),
             disks: self.storage.disks(),
-            port_mappings: self.port_fowrwaring.port_mappings(),
             remote_access: self.remote_access.access(),
         }
     }
@@ -101,6 +104,11 @@ impl Advanced {
             return Ok(());
         }
 
+        if self.network.new_network_popup() {
+            self.network.handle_key_events(key_event);
+            return Ok(());
+        }
+
         match key_event.code {
             KeyCode::Tab => match self.focused_section {
                 Section::Overview => {
@@ -114,7 +122,10 @@ impl Advanced {
                     }
                 }
                 Section::Storage => self.focused_section = Section::Network,
-                Section::Network => self.focused_section = Section::PortForwarding,
+                Section::Network => {
+                    self.port_fowrwaring.refresh();
+                    self.focused_section = Section::PortForwarding
+                }
                 Section::PortForwarding => self.focused_section = Section::RemoteAccess,
                 Section::RemoteAccess => {
                     if self.validate_remote_access() {
@@ -144,7 +155,10 @@ impl Advanced {
                     }
                 }
                 Section::Storage => self.focused_section = Section::Hardware,
-                Section::Network => self.focused_section = Section::Storage,
+                Section::Network => {
+                    self.port_fowrwaring.refresh();
+                    self.focused_section = Section::Storage
+                }
                 Section::PortForwarding => self.focused_section = Section::Network,
                 Section::RemoteAccess => {
                     if self.validate_remote_access() {
@@ -165,7 +179,9 @@ impl Advanced {
                     self.storage
                         .handle_key_events(key_event, self.hardware.arch());
                 }
-                Section::Network => {}
+                Section::Network => {
+                    self.network.handle_key_events(key_event);
+                }
                 Section::PortForwarding => {
                     self.port_fowrwaring.handle_key_events(key_event);
                 }
@@ -310,6 +326,7 @@ impl Advanced {
                     if cancel_popup
                         | self.storage.new_disk_popup()
                         | self.port_fowrwaring.new_mapping_popup()
+                        | self.network.new_network_popup()
                     {
                         BorderType::default()
                     } else {

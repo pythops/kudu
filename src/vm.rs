@@ -31,7 +31,7 @@ use crate::{
         Event::{self, Download, VMStarted},
     },
     firmware, get_kudu_data_dir, get_kudu_run_dir,
-    network::{NetworkBackend, PortMapping},
+    network::Network,
     notification::{self, Notification, NotificationLevel},
     os::Os::{self, TempleOS},
     qemu::Qemu,
@@ -40,9 +40,11 @@ use crate::{
     vmedit::VMEditData,
 };
 
+pub type VmId = uuid::Uuid;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VM {
-    pub id: uuid::Uuid,
+    pub id: VmId,
     pub name: String,
     pub boot_option: BootOption,
     pub os: Option<Os>,
@@ -50,8 +52,7 @@ pub struct VM {
     pub vcpu: u16,
     pub memory: u32,
     pub drives: Vec<Drive>,
-    pub network_backend: NetworkBackend,
-    pub port_mappings: Vec<PortMapping>,
+    pub networks: Vec<Network>,
     pub remote_access: Option<RemoteAccess>,
 
     #[serde(skip)]
@@ -267,9 +268,8 @@ impl VM {
             events: Vec::new(),
             events_state: ListState::default(),
             vnc: None,
-            network_backend: data.network_backend,
+            networks: data.networks,
             state: RunState::shutdown,
-            port_mappings: data.port_mappings,
             remote_access: data.remote_access,
         };
 
@@ -323,9 +323,9 @@ impl VM {
             path.pop();
         }
 
-        self.port_mappings = data.port_mappings;
-
         self.remote_access = data.remote_access;
+
+        self.networks = data.networks;
 
         path.push("vm.json");
         let mut file = File::create(&path)?;
@@ -352,20 +352,20 @@ impl VM {
         Ok(())
     }
 
-    fn get_pid_file(id: uuid::Uuid) -> PathBuf {
+    fn get_pid_file(id: VmId) -> PathBuf {
         let mut path = get_kudu_run_dir();
         path.push(id.to_string());
         path.push("pidfile");
         path
     }
 
-    pub fn get_socket_file(id: uuid::Uuid) -> PathBuf {
+    pub fn get_socket_file(id: VmId) -> PathBuf {
         let mut path = get_kudu_run_dir();
         path.push(id.to_string());
         path.push("socket");
         path
     }
-    pub fn get_events_file(id: uuid::Uuid) -> PathBuf {
+    pub fn get_events_file(id: VmId) -> PathBuf {
         let mut path = get_kudu_run_dir();
         path.push(id.to_string());
         path.push("events");
@@ -737,7 +737,55 @@ impl VM {
             }),
             ListItem::from({
                 let mut lines = Vec::new();
-                if self.port_mappings.is_empty() {
+                if self.networks.is_empty() {
+                    vec![
+                        Line::from(vec![
+                            Span::from("Networks").bold().fg(Color::Yellow),
+                            Span::from(" ".repeat(9)),
+                            Span::from(" - "),
+                        ]),
+                        Line::from(""),
+                    ]
+                } else {
+                    lines.push(Line::from(vec![
+                        Span::from("Networks").bold().fg(Color::Yellow),
+                        Span::from(" ".repeat(9)),
+                        Span::from("  id   ").bold(),
+                        Span::from(" ".repeat(7)),
+                        Span::from("Backend").bold(),
+                        Span::from(" ".repeat(4)),
+                        Span::from("  Nic  ").bold(),
+                        Span::from(" ".repeat(14)),
+                        Span::from("  Mac  ").bold(),
+                    ]));
+                    lines.push(Line::from(""));
+                    for network in &self.networks {
+                        lines.push(Line::from(vec![
+                            Span::from(" ".repeat(17)),
+                            Span::from(format!("{:8}", network.id)),
+                            Span::from(" ".repeat(6)),
+                            Span::from(format!("{:7}", network.backend)),
+                            Span::from(" ".repeat(6)),
+                            Span::from(format!("{:14}", network.nic)),
+                            Span::from(" ".repeat(7)),
+                            Span::from(format!(
+                                "{:17}",
+                                network.mac.clone().unwrap_or("Auto".to_string())
+                            )),
+                        ]))
+                    }
+                    lines.push(Line::from(""));
+                    lines
+                }
+            }),
+            ListItem::from({
+                let mut lines = Vec::new();
+
+                if self
+                    .networks
+                    .iter()
+                    .all(|network| network.port_mappings.is_empty())
+                {
                     vec![
                         Line::from(vec![
                             Span::from("Port Forwarding").bold().yellow(),
@@ -747,23 +795,35 @@ impl VM {
                         Line::from(""),
                     ]
                 } else {
+                    let mut port_mappings = Vec::new();
+                    for network in &self.networks {
+                        for mapping in &network.port_mappings {
+                            port_mappings.push((network.id.clone(), mapping));
+                        }
+                    }
                     lines.push(Line::from(vec![
-                        Span::from("Port Forwarding").bold().yellow(),
+                        Span::from("Port Forwarding").bold().fg(Color::Yellow),
                         Span::from(" ".repeat(2)),
-                        Span::from(format!(
-                            "{} - (Guest){:5} <-> {:5} (Host)",
-                            self.port_mappings[0].protocol,
-                            self.port_mappings[0].guest_port,
-                            self.port_mappings[0].host_port
-                        )),
+                        Span::from("Network").bold(),
+                        Span::from(" ".repeat(7)),
+                        Span::from("Protocol").bold(),
+                        Span::from(" ".repeat(4)),
+                        Span::from("Guest Port").bold(),
+                        Span::from(" ".repeat(4)),
+                        Span::from("Host Port").bold(),
                     ]));
-                    for mapping in self.port_mappings.iter().skip(1) {
+                    lines.push(Line::from(""));
+
+                    for (network_id, mapping) in port_mappings {
                         lines.push(Line::from(vec![
                             Span::from(" ".repeat(17)),
-                            Span::from(format!(
-                                "{} - (Guest){:5} <-> {:5} (Host)",
-                                mapping.protocol, mapping.guest_port, mapping.host_port
-                            )),
+                            Span::from(network_id),
+                            Span::from(" ".repeat(6)),
+                            Span::from(format!("{:3}", mapping.protocol)),
+                            Span::from(" ".repeat(6)),
+                            Span::from(format!("{:5}", mapping.guest_port)),
+                            Span::from(" ".repeat(11)),
+                            Span::from(format!("{:5}", mapping.host_port)),
                         ]))
                     }
                     lines.push(Line::from(""));

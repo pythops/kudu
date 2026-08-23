@@ -11,7 +11,11 @@ use std::{
     thread::{self},
 };
 
-use crate::{Arch, KVM_ENABLED, event::Event, vm::VM};
+use crate::{
+    Arch, KVM_ENABLED,
+    event::Event,
+    vm::{VM, VmId},
+};
 
 #[derive(Debug)]
 pub struct Qemu;
@@ -64,7 +68,13 @@ impl Qemu {
             }
         };
 
-        command.args(vm.network_backend.to_qemu_arg(&vm.port_mappings));
+        if vm.networks.is_empty() {
+            command.arg("-nic").arg("none");
+        } else {
+            for network in &vm.networks {
+                command.args(network.to_qemu_arg());
+            }
+        }
 
         if let Ok(host_arch) = Arch::try_from(std::env::consts::ARCH)
             && host_arch == vm.arch
@@ -121,7 +131,7 @@ impl Qemu {
         Ok(pid)
     }
 
-    pub fn events(vm_events_path: PathBuf, id: uuid::Uuid, sender: Sender<Event>) {
+    pub fn events(vm_events_path: PathBuf, id: VmId, sender: Sender<Event>) {
         thread::spawn(move || {
             if let Ok(stream) = UnixStream::connect(vm_events_path) {
                 let mut qmp = Qmp::from_stream(&stream);
@@ -143,7 +153,7 @@ impl Qemu {
         });
     }
 
-    pub fn pause(id: uuid::Uuid) -> Result<()> {
+    pub fn pause(id: VmId) -> Result<()> {
         let socket = VM::get_socket_file(id);
         let stream = UnixStream::connect(socket)?;
         let mut qmp = Qmp::from_stream(&stream);
@@ -152,7 +162,7 @@ impl Qemu {
         Ok(())
     }
 
-    pub fn resume(id: uuid::Uuid) -> Result<()> {
+    pub fn resume(id: VmId) -> Result<()> {
         let socket = VM::get_socket_file(id);
         let stream = UnixStream::connect(socket)?;
         let mut qmp = Qmp::from_stream(&stream);
@@ -161,7 +171,7 @@ impl Qemu {
         Ok(())
     }
 
-    pub fn quit(id: uuid::Uuid) -> Result<()> {
+    pub fn quit(id: VmId) -> Result<()> {
         let socket = VM::get_socket_file(id);
         let stream = UnixStream::connect(socket)?;
         let mut qmp = Qmp::from_stream(&stream);
@@ -170,7 +180,7 @@ impl Qemu {
         Ok(())
     }
 
-    pub fn power_down(id: uuid::Uuid) -> Result<()> {
+    pub fn power_down(id: VmId) -> Result<()> {
         let socket = VM::get_socket_file(id);
         let stream = UnixStream::connect(socket)?;
         let mut qmp = Qmp::from_stream(&stream);
@@ -179,7 +189,7 @@ impl Qemu {
         Ok(())
     }
 
-    pub fn vnc_infos(id: uuid::Uuid) -> Result<VncInfo> {
+    pub fn vnc_infos(id: VmId) -> Result<VncInfo> {
         let socket = VM::get_socket_file(id);
         let stream = UnixStream::connect(socket)?;
         let mut qmp = Qmp::from_stream(&stream);
@@ -187,7 +197,7 @@ impl Qemu {
         Ok(qmp.execute(&qmp::query_vnc {})?)
     }
 
-    pub fn status(id: uuid::Uuid) -> Result<RunState> {
+    pub fn status(id: VmId) -> Result<RunState> {
         let socket = VM::get_socket_file(id);
         let stream = UnixStream::connect(socket)?;
         let mut qmp = Qmp::from_stream(&stream);
@@ -196,7 +206,7 @@ impl Qemu {
         Ok(status.status)
     }
 
-    pub fn set_password(id: uuid::Uuid, password: String) -> Result<()> {
+    pub fn set_password(id: VmId, password: String) -> Result<()> {
         let socket = VM::get_socket_file(id);
         let stream = UnixStream::connect(socket)?;
         let mut qmp = Qmp::from_stream(&stream);

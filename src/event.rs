@@ -1,4 +1,4 @@
-use crate::{notification::Notification, vmbuilder::VMBuildData, vmedit::VMEditData};
+use crate::{notification::Notification, vm::VmId, vmbuilder::VMBuildData, vmedit::VMEditData};
 use anyhow::Result;
 use std::{
     sync::mpsc::{Receiver, Sender, channel},
@@ -24,13 +24,13 @@ pub enum Event {
     NewVM,
     CancelVM(bool),
     VMCreated(VMBuildData),
-    Download((uuid::Uuid, DownloadEvent)),
-    VMStarted(uuid::Uuid),
+    Download((VmId, DownloadEvent)),
+    VMStarted(VmId),
     VMEdited(VMEditData),
-    QuitVM(uuid::Uuid),
+    QuitVM(VmId),
     DeleteVm(bool),
-    QemuEvent((uuid::Uuid, qapi::qmp::Event)),
-    QemuExit(uuid::Uuid),
+    QemuEvent((VmId, qapi::qmp::Event)),
+    QemuExit(VmId),
 }
 
 #[allow(dead_code)]

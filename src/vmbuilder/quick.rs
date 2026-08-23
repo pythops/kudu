@@ -302,9 +302,8 @@ impl Quick {
             memory: self.memory(),
             arch: self.arch(),
             enable_uefi: true,
-            network_backend: network::NetworkBackend::default(),
+            networks: vec![network::Network::default()],
             disks: Vec::new(),
-            port_mappings: Vec::new(),
             cloudinit: Some(self.cloudinit().unwrap()), //FIX:
             remote_access,
         }

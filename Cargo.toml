@@ -31,6 +31,7 @@ qapi = { version = "0.15", features = ["qmp"] }
 which = "8"
 kvm-ioctls = "0.25.0"
 rustix = { version = "1", features = ["fs"] }
+rand = "0.10"
 
 [profile.release]
 lto = "fat"

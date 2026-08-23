@@ -1223,6 +1223,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "qapi",
+ "rand 0.10.2",
  "ratatui",
  "reqwest",
  "rustix",

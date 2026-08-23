@@ -1,5 +1,7 @@
+pub mod network;
+pub mod port;
 use anyhow::Result;
-use std::{mem::discriminant, path::PathBuf, sync::mpsc::Sender};
+use std::{cell::RefCell, mem::discriminant, path::PathBuf, rc::Rc, sync::mpsc::Sender};
 
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -16,9 +18,9 @@ use crate::{
     Arch,
     access::{RemoteAccess, vnc::VncBuilder},
     event::Event,
-    network::{MappingBuilder, PortMapping},
+    network::Network,
     storage::{Disk, DiskBuilder, Media},
-    vm::VM,
+    vm::{VM, VmId},
 };
 
 #[derive(Debug, Clone, Default)]
@@ -28,9 +30,10 @@ struct UserInputField {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Section {
+enum Section {
     Hardware(HardwareSection),
     Storage,
+    Network,
     PortForwarding,
     RemoteAccess,
 }
@@ -44,30 +47,27 @@ pub enum HardwareSection {
 
 #[derive(Debug, Clone)]
 pub struct EditVM {
-    _name: UserInputField,
+    section: Section,
     vcpu: UserInputField,
     memory: UserInputField,
     disk_state: TableState,
     pub new_disk: Option<DiskBuilder>,
-    pub focused_section: Section,
     added_disks: Vec<Disk>,
     deleted_disks: Vec<PathBuf>,
-    added_port_mappings: Vec<PortMapping>,
-    deleted_port_mappings: Vec<PortMapping>,
-    pub new_mapping: Option<MappingBuilder>,
-    mapping_state: TableState,
+    network: network::NetworkEdit,
+    port_forwarding: port::PortForwarding,
     vnc: VncBuilder,
     pub vm: VM,
 }
 
 #[derive(Debug, Clone)]
 pub struct VMEditData {
-    pub id: uuid::Uuid,
+    pub id: VmId,
     pub deleted_disks: Vec<PathBuf>,
     pub added_disks: Vec<Disk>,
     pub new_vcpu: u16,
     pub new_memory: u32,
-    pub port_mappings: Vec<PortMapping>,
+    pub networks: Vec<Network>,
     pub remote_access: Option<RemoteAccess>,
 }
 
@@ -75,12 +75,6 @@ impl EditVM {
     pub fn new(vm: &VM) -> Self {
         let disks = vm.disks();
         let disk_state = if disks.is_empty() {
-            TableState::default()
-        } else {
-            TableState::default().with_selected(Some(0))
-        };
-
-        let mapping_state = if vm.port_mappings.is_empty() {
             TableState::default()
         } else {
             TableState::default().with_selected(Some(0))
@@ -95,11 +89,9 @@ impl EditVM {
             }
         };
 
+        let networks = Rc::new(RefCell::new(vm.networks.clone()));
+
         Self {
-            _name: UserInputField {
-                field: Input::from(vm.name.clone()),
-                error: None,
-            },
             vcpu: UserInputField {
                 field: Input::from(vm.vcpu.to_string()),
                 error: None,
@@ -110,16 +102,20 @@ impl EditVM {
             },
             disk_state,
             new_disk: None,
-            focused_section: Section::Hardware(HardwareSection::Cpu),
+            section: Section::Hardware(HardwareSection::Cpu),
             added_disks: Vec::new(),
             deleted_disks: Vec::new(),
-            added_port_mappings: Vec::new(),
-            deleted_port_mappings: Vec::new(),
-            new_mapping: None,
-            mapping_state,
+            network: network::NetworkEdit::new(networks.clone()),
+            port_forwarding: port::PortForwarding::new(networks),
             vnc,
             vm: vm.clone(),
         }
+    }
+
+    pub fn new_popup(&self) -> bool {
+        self.port_forwarding.new_mapping_popup()
+            | self.new_disk.is_some()
+            | self.network.new_network_popup()
     }
 
     fn validate_harware_section(&mut self) -> bool {
@@ -201,97 +197,74 @@ impl EditVM {
             return Ok(());
         }
 
-        if let Some(new_mapping) = &mut self.new_mapping {
-            match key_event.code {
-                KeyCode::Esc => {
-                    self.new_mapping = None;
-                }
-                KeyCode::Enter => {
-                    if new_mapping.validate() {
-                        let mapping = new_mapping.build();
-                        self.added_port_mappings.push(mapping);
-                        self.new_mapping = None;
-
-                        if self.mapping_state.selected().is_none() {
-                            self.mapping_state.select(Some(0));
-                        }
-                    }
-                }
-
-                _ => {
-                    new_mapping.handle_key_events(key_event);
-                }
-            }
-
+        if self.port_forwarding.new_mapping_popup() {
+            self.port_forwarding.handle_key_events(key_event);
             return Ok(());
         }
 
         match key_event.code {
             KeyCode::Enter => {
-                let port_mappings = {
-                    let mut port_mappings = self.vm.port_mappings.clone();
-                    for deleted_mapping in &self.deleted_port_mappings {
-                        port_mappings.retain(|mapping| mapping != deleted_mapping);
-                    }
-                    port_mappings.extend(self.added_port_mappings.clone());
-                    port_mappings
-                };
-
                 let _ = sender.send(Event::VMEdited(VMEditData {
                     id: self.vm.id,
                     deleted_disks: self.deleted_disks.clone(),
                     added_disks: self.added_disks.clone(),
                     new_vcpu: self.vcpu.field.value().parse::<u16>().unwrap(),
                     new_memory: self.memory.field.value().parse::<u32>().unwrap(),
-                    port_mappings,
+                    networks: self.network.build(),
                     remote_access: self.vnc.build().map(RemoteAccess::Vnc),
                 }));
             }
-            KeyCode::Tab => match self.focused_section {
+            KeyCode::Tab => match self.section {
                 Section::Hardware(_) => {
                     if self.validate_harware_section() {
-                        self.focused_section = Section::Storage;
+                        self.section = Section::Storage;
                     }
                 }
                 Section::Storage => {
-                    self.focused_section = Section::PortForwarding;
+                    self.section = Section::Network;
+                }
+                Section::Network => {
+                    self.port_forwarding.refresh();
+                    self.section = Section::PortForwarding;
                 }
                 Section::PortForwarding => {
-                    self.focused_section = Section::RemoteAccess;
+                    self.section = Section::RemoteAccess;
                 }
                 Section::RemoteAccess => {
                     if self.validate_remote_access() {
-                        self.focused_section = Section::Hardware(HardwareSection::default())
+                        self.section = Section::Hardware(HardwareSection::default())
                     }
                 }
             },
-            KeyCode::BackTab => match self.focused_section {
+            KeyCode::BackTab => match self.section {
                 Section::Hardware(_) => {
                     if self.validate_harware_section() {
-                        self.focused_section = Section::RemoteAccess;
+                        self.section = Section::RemoteAccess;
                     }
                 }
-                Section::Storage => {
-                    self.focused_section = Section::Hardware(HardwareSection::default())
+                Section::Storage => self.section = Section::Hardware(HardwareSection::default()),
+                Section::Network => {
+                    self.port_forwarding.refresh();
+                    self.section = Section::Storage;
                 }
                 Section::PortForwarding => {
-                    self.focused_section = Section::Storage;
+                    self.section = Section::Network;
                 }
 
                 Section::RemoteAccess => {
                     if self.validate_remote_access() {
-                        self.focused_section = Section::PortForwarding;
+                        self.section = Section::PortForwarding;
                     }
                 }
             },
-            _ => match &self.focused_section {
+            _ => match &self.section {
                 Section::Hardware(hardware_section) => match hardware_section {
                     HardwareSection::Cpu => match key_event.code {
                         KeyCode::Up | KeyCode::Char('k') if self.validate_harware_section() => {
-                            self.focused_section = Section::Hardware(HardwareSection::Memory);
+                            self.section = Section::Hardware(HardwareSection::Memory);
                         }
                         KeyCode::Down | KeyCode::Char('j') if self.validate_harware_section() => {
-                            self.focused_section = Section::Hardware(HardwareSection::Memory);
+                            self.section = Section::Hardware(HardwareSection::Memory);
                         }
                         _ => {
                             self.vcpu
@@ -301,10 +274,10 @@ impl EditVM {
                     },
                     HardwareSection::Memory => match key_event.code {
                         KeyCode::Up | KeyCode::Char('k') if self.validate_harware_section() => {
-                            self.focused_section = Section::Hardware(HardwareSection::Cpu);
+                            self.section = Section::Hardware(HardwareSection::Cpu);
                         }
                         KeyCode::Down | KeyCode::Char('j') if self.validate_harware_section() => {
-                            self.focused_section = Section::Hardware(HardwareSection::Cpu);
+                            self.section = Section::Hardware(HardwareSection::Cpu);
                         }
                         _ => {
                             self.memory
@@ -353,45 +326,12 @@ impl EditVM {
                     }
                     _ => {}
                 },
-                Section::PortForwarding => match key_event.code {
-                    KeyCode::Char('j') | KeyCode::Down => {
-                        if let Some(index) = self.mapping_state.selected() {
-                            self.mapping_state.select(Some(index.saturating_add(1).min(
-                                self.vm.port_mappings.len() + self.added_port_mappings.len() - 1,
-                            )));
-                        }
-                    }
-                    KeyCode::Char('k') | KeyCode::Up => {
-                        if let Some(index) = self.mapping_state.selected() {
-                            self.mapping_state.select(Some(index.saturating_sub(1)));
-                        }
-                    }
-                    KeyCode::Char('d') => {
-                        if let Some(index) = self.mapping_state.selected() {
-                            if index < self.vm.port_mappings.len() {
-                                let mapping = &self.vm.port_mappings[index];
-                                if !self.deleted_port_mappings.contains(mapping) {
-                                    self.deleted_port_mappings.push(mapping.clone());
-                                }
-                            } else {
-                                let index = index.saturating_sub(self.vm.port_mappings.len());
-                                self.added_port_mappings.remove(index);
-                            }
-                        }
-                    }
-                    KeyCode::Char('u') => {
-                        if let Some(index) = self.mapping_state.selected()
-                            && let Some(mapping) = self.vm.port_mappings.get(index)
-                        {
-                            self.deleted_port_mappings
-                                .retain(|deleted_mapping| deleted_mapping != mapping);
-                        }
-                    }
-                    KeyCode::Char('n') => {
-                        self.new_mapping = Some(MappingBuilder::new());
-                    }
-                    _ => {}
-                },
+                Section::Network => {
+                    self.network.handle_key_events(key_event);
+                }
+                Section::PortForwarding => {
+                    self.port_forwarding.handle_key_events(key_event);
+                }
                 Section::RemoteAccess => {
                     self.vnc.handle_key_events(key_event);
                 }
@@ -402,7 +342,7 @@ impl EditVM {
     }
 
     fn title_span(&self, section: Section) -> Span<'_> {
-        let is_focused = discriminant(&self.focused_section) == discriminant(&section);
+        let is_focused = discriminant(&self.section) == discriminant(&section);
         match section {
             Section::Hardware(_) => {
                 if is_focused {
@@ -422,6 +362,16 @@ impl EditVM {
                     )
                 } else {
                     Span::from("   Storage 󱛟   ").fg(Color::DarkGray)
+                }
+            }
+            Section::Network => {
+                if is_focused {
+                    Span::styled(
+                        "  Network 󰛳    ",
+                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
+                    )
+                } else {
+                    Span::from("  Network 󰛳    ").fg(Color::DarkGray)
                 }
             }
             Section::PortForwarding => {
@@ -453,6 +403,7 @@ impl EditVM {
                     Line::from(vec![
                         self.title_span(Section::Hardware(HardwareSection::default())),
                         self.title_span(Section::Storage),
+                        self.title_span(Section::Network),
                         self.title_span(Section::PortForwarding),
                         self.title_span(Section::RemoteAccess),
                     ])
@@ -478,7 +429,7 @@ impl EditVM {
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(90),
+                Constraint::Length(120),
                 Constraint::Fill(1),
             ])
             .margin(1)
@@ -491,6 +442,11 @@ impl EditVM {
                 .title(" Edit VM 󰏖  ")
                 .title_alignment(Alignment::Center)
                 .border_type(BorderType::Thick)
+                .border_type(if self.new_popup() {
+                    BorderType::default()
+                } else {
+                    BorderType::Thick
+                })
                 .border_style(Style::default().yellow()),
             area,
         );
@@ -512,7 +468,7 @@ impl EditVM {
 
         self.render_header(frame, section_block);
 
-        match &self.focused_section {
+        match &self.section {
             Section::Hardware(hardware_section) => {
                 let (cpu_block, memory_block) = {
                     let chunks = Layout::default()
@@ -704,81 +660,11 @@ impl EditVM {
                     new_disk.render(frame);
                 }
             }
+            Section::Network => {
+                self.network.render(frame, area);
+            }
             Section::PortForwarding => {
-                let area = area.inner(Margin {
-                    horizontal: 2,
-                    vertical: 2,
-                });
-
-                if self.vm.port_mappings.is_empty() && self.added_port_mappings.is_empty() {
-                    let message = Text::from("Press n to set up port forwading").centered();
-                    frame.render_widget(
-                        message,
-                        area.inner(Margin {
-                            horizontal: 0,
-                            vertical: 3,
-                        }),
-                    );
-                } else {
-                    let widths = [
-                        Constraint::Length(5),
-                        Constraint::Length(10),
-                        Constraint::Length(10),
-                        Constraint::Length(10),
-                    ];
-
-                    let vm_port_mappings = self.vm.port_mappings.clone();
-
-                    let vm_port_mappings = vm_port_mappings.iter().map(|mapping| {
-                        let to_delete = self.deleted_port_mappings.contains(mapping);
-                        Row::new(vec![
-                            {
-                                if to_delete {
-                                    "Del".to_string()
-                                } else {
-                                    String::new()
-                                }
-                            },
-                            mapping.protocol.to_string(),
-                            mapping.guest_port.to_string(),
-                            mapping.host_port.to_string(),
-                        ])
-                        .style(if to_delete {
-                            Style::new().red()
-                        } else {
-                            Style::default()
-                        })
-                    });
-
-                    let new_port_mappings = self.added_port_mappings.iter().map(|mapping| {
-                        Row::new(vec![
-                            "New".to_string(),
-                            mapping.protocol.to_string(),
-                            mapping.guest_port.to_string(),
-                            mapping.host_port.to_string(),
-                        ])
-                        .green()
-                    });
-
-                    let mut mappings: Vec<Row> = Vec::new();
-                    mappings.extend(vm_port_mappings);
-                    mappings.extend(new_port_mappings);
-
-                    let mappings = Table::new(mappings, widths)
-                        .header(
-                            Row::new(vec!["", "Protocol", "Guest Port", "Host Port"])
-                                .style(Style::new().bold())
-                                .bottom_margin(1),
-                        )
-                        .flex(ratatui::layout::Flex::SpaceBetween)
-                        .row_highlight_style(Style::new().on_dark_gray())
-                        .column_spacing(1);
-
-                    frame.render_stateful_widget(mappings, area, &mut self.mapping_state);
-                }
-                if let Some(new_mapping) = &self.new_mapping {
-                    new_mapping.render(frame);
-                }
+                self.port_forwarding.render(frame, area);
             }
             Section::RemoteAccess => {
                 self.vnc.render(frame, area, false);
@@ -787,7 +673,7 @@ impl EditVM {
     }
 
     pub fn help(&self, block_width: u16) -> Vec<Line<'static>> {
-        match self.focused_section {
+        match self.section {
             Section::Hardware(_) => {
                 vec![Line::from(vec![
                     Span::from("k,↑").bold(),
@@ -807,7 +693,7 @@ impl EditVM {
                 ])]
             }
             _ => {
-                if self.new_disk.is_some() | self.new_mapping.is_some() {
+                if self.new_disk.is_some() | self.port_forwarding.new_mapping_popup() {
                     vec![Line::from(vec![
                         Span::from("k,↑").bold(),
                         Span::from("  Up"),

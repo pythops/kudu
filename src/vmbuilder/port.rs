@@ -1,3 +1,5 @@
+use std::{cell::RefCell, rc::Rc};
+
 use ratatui::{
     Frame,
     layout::{Constraint, Margin, Rect},
@@ -8,21 +10,26 @@ use ratatui::{
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::network::{MappingBuilder, PortMapping};
+use crate::network::{
+    Network, NetworkId,
+    port_forwarding::{MappingBuilder, PortMapping},
+};
 
 #[derive(Debug, Clone)]
 pub struct PortForwaring {
-    mappings: Vec<PortMapping>,
+    mappings: Vec<(NetworkId, PortMapping)>,
     mapping_state: TableState,
     new_mapping: Option<MappingBuilder>,
+    networks: Rc<RefCell<Vec<Network>>>,
 }
 
 impl PortForwaring {
-    pub fn new() -> Self {
+    pub fn new(networks: Rc<RefCell<Vec<Network>>>) -> Self {
         PortForwaring {
             mappings: Vec::new(),
             mapping_state: TableState::new(),
             new_mapping: None,
+            networks,
         }
     }
 
@@ -30,8 +37,16 @@ impl PortForwaring {
         self.new_mapping.is_some()
     }
 
-    pub fn port_mappings(&self) -> Vec<PortMapping> {
-        self.mappings.clone()
+    pub fn refresh(&mut self) {
+        let mut mappings = Vec::new();
+
+        for network in self.networks.borrow().iter() {
+            for mapping in network.port_mappings.clone() {
+                mappings.push((network.id.clone(), mapping));
+            }
+        }
+
+        self.mappings = mappings;
     }
 
     pub fn handle_key_events(&mut self, key_event: KeyEvent) {
@@ -42,9 +57,19 @@ impl PortForwaring {
                 }
                 KeyCode::Enter => {
                     if new_mapping.validate() {
-                        let mapping = new_mapping.build();
-                        self.mappings.push(mapping);
+                        let (network_id, mapping) = new_mapping.build();
+
+                        if let Some(network) = self
+                            .networks
+                            .borrow_mut()
+                            .iter_mut()
+                            .find(|network| network.id == network_id)
+                        {
+                            network.port_mappings.push(mapping);
+                        }
+
                         self.new_mapping = None;
+                        self.refresh();
 
                         if self.mapping_state.selected().is_none() {
                             self.mapping_state.select(Some(0));
@@ -73,7 +98,18 @@ impl PortForwaring {
             }
             KeyCode::Char('d') => {
                 if let Some(index) = self.mapping_state.selected() {
-                    self.mappings.remove(index);
+                    let (netowrk_id, mapping) = self.mappings.remove(index);
+
+                    if let Some(network) = self
+                        .networks
+                        .borrow_mut()
+                        .iter_mut()
+                        .find(|network| network.id == netowrk_id)
+                    {
+                        network.port_mappings.retain(|&m| m != mapping);
+                    }
+
+                    self.refresh();
 
                     if !self.mappings.is_empty() {
                         self.mapping_state.select(Some(index.saturating_sub(1)));
@@ -82,8 +118,8 @@ impl PortForwaring {
                     }
                 }
             }
-            KeyCode::Char('n') => {
-                self.new_mapping = Some(MappingBuilder::new());
+            KeyCode::Char('n') if !self.networks.borrow().is_empty() => {
+                self.new_mapping = Some(MappingBuilder::new(self.networks.clone()));
             }
             _ => {}
         }
@@ -95,7 +131,7 @@ impl PortForwaring {
             if self.mappings.is_empty() {
                 vec![
                     Line::from(vec![
-                        Span::from("Port Forwaring ").bold(),
+                        Span::from("Port Forwarding ").bold(),
                         Span::from(" ".repeat(4)),
                         Span::from(" - "),
                     ]),
@@ -103,21 +139,25 @@ impl PortForwaring {
                 ]
             } else {
                 lines.push(Line::from(vec![
-                    Span::from("Port Forwaring ").bold(),
+                    Span::from("Port Forwarding ").bold(),
                     Span::from(" ".repeat(4)),
                     Span::from(format!(
-                        " {} - (Guest){} <-> {}(Host)",
-                        self.mappings[0].protocol,
-                        self.mappings[0].guest_port,
-                        self.mappings[0].host_port
+                        "{}  --  {} - (Guest){} <-> {}(Host)",
+                        self.mappings[0].0,
+                        self.mappings[0].1.protocol,
+                        self.mappings[0].1.guest_port,
+                        self.mappings[0].1.host_port
                     )),
                 ]));
                 for mapping in self.mappings.iter().skip(1) {
                     lines.push(Line::from(vec![
                         Span::from(" ".repeat(20)),
                         Span::from(format!(
-                            " {} - (Guest){} <---> {}(Host)",
-                            mapping.protocol, mapping.guest_port, mapping.host_port
+                            "{}  --  {} - (Guest){} <---> {}(Host)",
+                            mapping.0,
+                            mapping.1.protocol,
+                            mapping.1.guest_port,
+                            mapping.1.host_port
                         )),
                     ]))
                 }
@@ -127,7 +167,17 @@ impl PortForwaring {
         })]
     }
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
-        if self.mappings.is_empty() {
+        if self.networks.borrow().is_empty() {
+            let message =
+                Text::from("Create a network first before setting up port forwarding").centered();
+            frame.render_widget(
+                message,
+                area.inner(Margin {
+                    horizontal: 0,
+                    vertical: 3,
+                }),
+            );
+        } else if self.mappings.is_empty() {
             let message = Text::from("Press n to set up port forwading").centered();
             frame.render_widget(
                 message,
@@ -141,18 +191,20 @@ impl PortForwaring {
                 Constraint::Length(10),
                 Constraint::Length(10),
                 Constraint::Length(10),
+                Constraint::Length(10),
             ];
             let mappins = self.mappings.iter().map(|mapping| {
                 Row::new(vec![
-                    mapping.protocol.to_string(),
-                    mapping.guest_port.to_string(),
-                    mapping.host_port.to_string(),
+                    mapping.0.clone(),
+                    mapping.1.protocol.to_string(),
+                    mapping.1.guest_port.to_string(),
+                    mapping.1.host_port.to_string(),
                 ])
             });
 
             let mappings = Table::new(mappins, widths)
                 .header(
-                    Row::new(vec!["Protocol", "Guest Port", "Host Port"])
+                    Row::new(vec!["Network", "Protocol", "Guest Port", "Host Port"])
                         .style(Style::new().bold())
                         .bottom_margin(1),
                 )
