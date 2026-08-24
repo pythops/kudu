@@ -39,6 +39,12 @@ cd kudu
 cargo build --release
 ```
 
+### On Arch Linux
+
+```bash
+pacman -S kudu
+```
+
 ## Usage
 
 ```bash
