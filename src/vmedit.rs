@@ -418,7 +418,7 @@ impl EditVM {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(22),
+                Constraint::Length(24),
                 Constraint::Fill(1),
             ])
             .margin(1)
