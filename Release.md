@@ -1,3 +1,8 @@
+## v0.2.1 - 2016-08-25
+
+- fix cursor display for remote access section
+- fix applying network and port forwarding edit changes
+
 ## v0.2 - 2026-08-24
 
 - Support configuring networks with different NIC and backends.
