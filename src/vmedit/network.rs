@@ -113,7 +113,7 @@ impl NetworkEdit {
                     self.networks.borrow_mut().push(network.clone());
                 }
             }
-            KeyCode::Char('n') if !self.networks.borrow().is_empty() => {
+            KeyCode::Char('n') => {
                 self.new_network = Some(NewNetwork::new());
             }
             _ => {}

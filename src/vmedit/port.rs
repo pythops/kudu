@@ -17,8 +17,8 @@ use crate::network::{
 
 #[derive(Debug, Clone)]
 pub(super) struct PortForwarding {
-    added_port_mappings: Vec<(NetworkId, PortMapping)>,
-    deleted_port_mappings: Vec<(NetworkId, PortMapping)>,
+    pub added_port_mappings: Vec<(NetworkId, PortMapping)>,
+    pub deleted_port_mappings: Vec<(NetworkId, PortMapping)>,
     new_mapping: Option<MappingBuilder>,
     mapping_state: TableState,
     networks: Rc<RefCell<Vec<Network>>>,

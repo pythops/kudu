@@ -226,13 +226,26 @@ impl EditVM {
 
         match key_event.code {
             KeyCode::Enter => {
+                let mut networks = self.network.build();
+                for (network_id, mapping) in &self.port_forwarding.added_port_mappings {
+                    if let Some(network) = networks.iter_mut().find(|n| &n.id == network_id) {
+                        network.port_mappings.push(*mapping);
+                    }
+                }
+
+                for (network_id, mapping) in &self.port_forwarding.deleted_port_mappings {
+                    if let Some(network) = networks.iter_mut().find(|n| &n.id == network_id) {
+                        network.port_mappings.retain(|m| m != mapping);
+                    }
+                }
+
                 let _ = sender.send(Event::VMEdited(VMEditData {
                     id: self.vm.id,
                     deleted_disks: self.deleted_disks.clone(),
                     added_disks: self.added_disks.clone(),
                     new_vcpu: self.vcpu.field.value().parse::<u16>().unwrap(),
                     new_memory: self.memory.field.value().parse::<u32>().unwrap(),
-                    networks: self.network.build(),
+                    networks,
                     remote_access: self.vnc.build().map(RemoteAccess::Vnc),
                 }));
             }
