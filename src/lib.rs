@@ -16,16 +16,16 @@ pub mod os;
 pub mod qemu;
 pub mod storage;
 pub mod tui;
-pub mod uefi;
 pub mod ui;
 pub mod vm;
 pub mod vmbuilder;
 pub mod vmedit;
 
 static mut KVM_ENABLED: bool = false;
+pub static mut USER_UID: u32 = 0;
 
 fn get_kudu_data_dir() -> PathBuf {
-    if unsafe { libc::geteuid() } == 0 {
+    if unsafe { USER_UID == 0 } {
         PathBuf::from("/var/lib/kudu")
     } else {
         env::home_dir().unwrap().join(".local/share/kudu")
@@ -33,11 +33,10 @@ fn get_kudu_data_dir() -> PathBuf {
 }
 
 fn get_kudu_run_dir() -> PathBuf {
-    let pid = unsafe { libc::geteuid() };
-    if pid == 0 {
+    if unsafe { USER_UID == 0 } {
         PathBuf::from("/var/lib/kudu/run")
     } else {
-        PathBuf::from(format!("/run/user/{}/kudu", pid))
+        PathBuf::from(format!("/run/user/{}/kudu", unsafe { USER_UID }))
     }
 }
 

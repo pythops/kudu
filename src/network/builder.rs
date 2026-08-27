@@ -10,8 +10,9 @@ use ratatui::{
 };
 use tui_input::{Input, backend::crossterm::EventHandler};
 
-use super::backend::NetworkBackend;
-use super::{Network, Nic};
+use crate::USER_UID;
+
+use super::{Network, NetworkBackend, Nic};
 
 #[derive(Debug, Clone)]
 pub struct NetworkBuilder {
@@ -293,16 +294,36 @@ impl NewNetwork {
 
             _ => match self.section {
                 Section::Backend => match key_event.code {
-                    KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') => {
-                        match self.backend {
-                            NetworkBackend::Passt => {
-                                self.backend = NetworkBackend::User;
-                            }
-                            NetworkBackend::User => {
+                    KeyCode::Right | KeyCode::Char('l') => match self.backend {
+                        NetworkBackend::Passt => {
+                            self.backend = NetworkBackend::User;
+                        }
+                        NetworkBackend::User => {
+                            if unsafe { USER_UID == 0 } {
+                                self.backend = NetworkBackend::Tap;
+                            } else {
                                 self.backend = NetworkBackend::Passt;
                             }
                         }
-                    }
+                        NetworkBackend::Tap => {
+                            self.backend = NetworkBackend::Passt;
+                        }
+                    },
+                    KeyCode::Left | KeyCode::Char('h') => match self.backend {
+                        NetworkBackend::Passt => {
+                            if unsafe { USER_UID == 0 } {
+                                self.backend = NetworkBackend::Tap;
+                            } else {
+                                self.backend = NetworkBackend::User;
+                            }
+                        }
+                        NetworkBackend::User => {
+                            self.backend = NetworkBackend::Passt;
+                        }
+                        NetworkBackend::Tap => {
+                            self.backend = NetworkBackend::User;
+                        }
+                    },
                     _ => {}
                 },
 

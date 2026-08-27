@@ -1,10 +1,8 @@
-pub mod backend;
 pub mod builder;
 pub mod port_forwarding;
 
 use serde::{Deserialize, Serialize};
 
-use backend::NetworkBackend;
 use port_forwarding::PortMapping;
 
 pub type NetworkId = String;
@@ -27,6 +25,15 @@ pub enum Nic {
     Virtio,
     E1000,
     RTL8139,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Default, PartialEq, Copy, strum::Display, Deserialize, Serialize)]
+pub enum NetworkBackend {
+    #[default]
+    User,
+    Passt,
+    Tap,
 }
 
 impl Default for Network {
@@ -117,6 +124,13 @@ impl Network {
                     }
                 }];
 
+                [&device[..], &netdev[..]].concat()
+            }
+            NetworkBackend::Tap => {
+                let netdev = [
+                    "-netdev".to_string(),
+                    format!("tap,id={},ifname=tap{},script=no,downscript=no", id, id),
+                ];
                 [&device[..], &netdev[..]].concat()
             }
         }
