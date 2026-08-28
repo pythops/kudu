@@ -23,6 +23,7 @@ use ratatui::{
 
 use crate::confirmation::delete::DeleteConfirmation;
 use crate::firmware::uefi_package;
+use crate::network::bridge::Bridge;
 use crate::vmedit::EditVM;
 use crate::{
     Arch, event::Event, get_kudu_data_dir, get_kudu_run_dir, help::Help,
@@ -221,6 +222,10 @@ impl App {
                     .open(qemu_bridge_conf_path)?;
                 writeln!(&mut file, "allow {}", KUDU_BRIDGE_INTERFACE)?;
             }
+
+            Bridge::add(KUDU_BRIDGE_INTERFACE).with_context(|| {
+                format!("Can not create the bridge interface {KUDU_BRIDGE_INTERFACE}")
+            })?;
         }
 
         which("xorriso").with_context(|| "Please install xorriso package.")?;

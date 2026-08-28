@@ -1,3 +1,4 @@
+pub mod bridge;
 pub mod builder;
 pub mod port_forwarding;
 

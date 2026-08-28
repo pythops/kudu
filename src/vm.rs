@@ -23,7 +23,7 @@ use ratatui::{
 };
 
 use crate::{
-    Arch, BootOption, KVM_ENABLED,
+    Arch, BootOption, KUDU_BRIDGE_INTERFACE, KVM_ENABLED,
     access::RemoteAccess,
     cloudinit::Cloudinit,
     event::{
@@ -31,7 +31,7 @@ use crate::{
         Event::{self, Download, VMStarted},
     },
     firmware, get_kudu_data_dir, get_kudu_run_dir,
-    network::Network,
+    network::{Network, NetworkBackend, bridge::Bridge},
     notification::{self, Notification, NotificationLevel},
     os::Os::{self, TempleOS},
     qemu::Qemu,
@@ -496,6 +496,17 @@ impl VM {
                 let pid_file_path = VM::get_pid_file(self.id);
                 if let Err(e) = fs::write(pid_file_path, pid.to_string()) {
                     let _ = sender.send(Event::Notification(Notification::error(e)));
+                }
+
+                if self
+                    .networks
+                    .iter()
+                    .find(|network| {
+                        network.backend == NetworkBackend::Bridge(KUDU_BRIDGE_INTERFACE.into())
+                    })
+                    .is_some()
+                {
+                    let _ = Bridge::up(KUDU_BRIDGE_INTERFACE);
                 }
 
                 let _ = sender.send(VMStarted(self.id));
