@@ -28,8 +28,6 @@ pub enum Protocol {
     UDP,
 }
 
-// Port Forwarding Builder
-
 #[derive(Debug, Clone, Default)]
 struct UserInputField {
     field: Input,

@@ -21,6 +21,8 @@ pub mod vm;
 pub mod vmbuilder;
 pub mod vmedit;
 
+const KUDU_BRIDGE_INTERFACE: &str = "virbr0";
+
 static mut KVM_ENABLED: bool = false;
 pub static mut USER_UID: u32 = 0;
 

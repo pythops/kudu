@@ -11,7 +11,7 @@ use ratatui::{
 };
 use tui_input::{Input, backend::crossterm::EventHandler};
 
-use crate::USER_UID;
+use crate::{KUDU_BRIDGE_INTERFACE, USER_UID};
 
 use super::{Network, NetworkBackend, Nic};
 
@@ -326,7 +326,7 @@ impl NewNetwork {
                             }
                         }
                         NetworkBackend::Tap => {
-                            self.backend = NetworkBackend::Bridge("virbr0".into());
+                            self.backend = NetworkBackend::Bridge(KUDU_BRIDGE_INTERFACE.into());
                         }
                         NetworkBackend::Bridge(_) => {
                             self.backend = NetworkBackend::Passt;
@@ -335,7 +335,7 @@ impl NewNetwork {
                     KeyCode::Left | KeyCode::Char('h') => match self.backend {
                         NetworkBackend::Passt => {
                             if unsafe { USER_UID == 0 } {
-                                self.backend = NetworkBackend::Bridge("virbr0".into());
+                                self.backend = NetworkBackend::Bridge(KUDU_BRIDGE_INTERFACE.into());
                             } else {
                                 self.backend = NetworkBackend::User;
                             }
