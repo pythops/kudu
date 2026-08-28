@@ -12,7 +12,7 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Clear},
 };
 
-use crate::network::{Network, NetworkId};
+use crate::network::{Network, NetworkBackend, NetworkId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct PortMapping {
@@ -57,6 +57,10 @@ pub struct MappingBuilder {
 
 impl MappingBuilder {
     pub fn new(networks: Rc<RefCell<Vec<Network>>>) -> Self {
+        networks.borrow_mut().retain(|network| {
+            network.backend == NetworkBackend::Passt || network.backend == NetworkBackend::User
+        });
+
         MappingBuilder {
             section: Section::default(),
             guest_port: UserInputField::default(),
