@@ -263,7 +263,7 @@ impl Advanced {
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(130),
+                Constraint::Length(140),
                 Constraint::Fill(1),
             ])
             .margin(1)
@@ -312,7 +312,7 @@ impl Advanced {
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(80),
+                Constraint::Length(100),
                 Constraint::Fill(1),
             ])
             .flex(ratatui::layout::Flex::Center)

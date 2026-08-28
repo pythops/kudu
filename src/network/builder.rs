@@ -1,6 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crossterm::event::{KeyCode, KeyEvent};
+use rand::RngExt;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Flex, Layout, Margin, Rect},
@@ -125,7 +126,7 @@ impl NetworkBuilder {
                     Span::from("Id   ").bold(),
                     Span::from(" ".repeat(8)),
                     Span::from("Backend").bold(),
-                    Span::from(" ".repeat(4)),
+                    Span::from(" ".repeat(12)),
                     Span::from("  Nic  ").bold(),
                     Span::from(" ".repeat(14)),
                     Span::from("  Mac  ").bold(),
@@ -136,8 +137,8 @@ impl NetworkBuilder {
                         Span::from(" ".repeat(20)),
                         Span::from(format!("{:8}", network.id)),
                         Span::from(" ".repeat(5)),
-                        Span::from(format!("{:7}", network.backend)),
-                        Span::from(" ".repeat(6)),
+                        Span::from(format!("{:14}", network.backend)),
+                        Span::from(" ".repeat(7)),
                         Span::from(format!("{:14}", network.nic)),
                         Span::from(" ".repeat(7)),
                         Span::from(format!(
@@ -169,7 +170,7 @@ impl NetworkBuilder {
         } else {
             let widths = [
                 Constraint::Length(8),  // id
-                Constraint::Length(10), // backend
+                Constraint::Length(14), // backend
                 Constraint::Length(10), // Nic
                 Constraint::Length(17), // Mac
             ];
@@ -232,6 +233,15 @@ pub struct NewNetwork {
     mac: UserInputField,
 }
 
+fn random_mac() -> String {
+    let mut mac: [u8; 6] = rand::rng().random();
+    mac[0] = (mac[0] & 0xFC) | 0x02;
+    format!(
+        "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
+    )
+}
+
 impl NewNetwork {
     pub fn new() -> Self {
         NewNetwork::default()
@@ -246,7 +256,17 @@ impl NewNetwork {
     }
 
     pub fn build(&self) -> Network {
-        Network::new(self.backend, self.nic, Vec::new(), self.mac())
+        match self.backend {
+            NetworkBackend::Tap | NetworkBackend::Bridge(_) if self.mac().is_none() => {
+                Network::new(
+                    self.backend.clone(),
+                    self.nic,
+                    Vec::new(),
+                    Some(random_mac()),
+                )
+            }
+            _ => Network::new(self.backend.clone(), self.nic, Vec::new(), self.mac()),
+        }
     }
 
     pub fn validate(&mut self) -> bool {
@@ -306,13 +326,16 @@ impl NewNetwork {
                             }
                         }
                         NetworkBackend::Tap => {
+                            self.backend = NetworkBackend::Bridge("virbr0".into());
+                        }
+                        NetworkBackend::Bridge(_) => {
                             self.backend = NetworkBackend::Passt;
                         }
                     },
                     KeyCode::Left | KeyCode::Char('h') => match self.backend {
                         NetworkBackend::Passt => {
                             if unsafe { USER_UID == 0 } {
-                                self.backend = NetworkBackend::Tap;
+                                self.backend = NetworkBackend::Bridge("virbr0".into());
                             } else {
                                 self.backend = NetworkBackend::User;
                             }
@@ -322,6 +345,9 @@ impl NewNetwork {
                         }
                         NetworkBackend::Tap => {
                             self.backend = NetworkBackend::User;
+                        }
+                        NetworkBackend::Bridge(_) => {
+                            self.backend = NetworkBackend::Tap;
                         }
                     },
                     _ => {}
