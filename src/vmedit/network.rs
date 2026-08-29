@@ -142,7 +142,7 @@ impl NetworkEdit {
             let widths = [
                 Constraint::Length(5),
                 Constraint::Length(10),
-                Constraint::Length(10),
+                Constraint::Length(14),
                 Constraint::Length(10),
                 Constraint::Length(17),
             ];

@@ -1,7 +1,8 @@
 use anyhow::Result;
 use chrono::Utc;
 use std::{
-    fs::{self, File},
+    fs::{self, File, Permissions, set_permissions},
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
@@ -14,6 +15,7 @@ impl Cloudinit {
 
         if !path.exists() {
             fs::create_dir(&path)?;
+            set_permissions(&path, Permissions::from_mode(0o777))?;
         }
 
         let root_dir = path.join(format!("{}", Utc::now()));
@@ -54,6 +56,7 @@ impl Cloudinit {
 
         if !path.exists() {
             fs::create_dir(&path)?;
+            set_permissions(&path, Permissions::from_mode(0o777))?;
         }
 
         let path = path.join(format!("user-data-{}", Utc::now().timestamp()));

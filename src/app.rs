@@ -1,5 +1,6 @@
-use std::fs::File;
-use std::io::Read;
+use std::fs::{self, File};
+use std::io::{Read, Write};
+use std::path::PathBuf;
 use std::process::Command;
 use std::thread;
 use std::{fs::create_dir_all, sync::mpsc::Sender};
@@ -22,12 +23,13 @@ use ratatui::{
 
 use crate::confirmation::delete::DeleteConfirmation;
 use crate::firmware::uefi_package;
+use crate::network::bridge::Bridge;
 use crate::vmedit::EditVM;
 use crate::{
     Arch, event::Event, get_kudu_data_dir, get_kudu_run_dir, help::Help,
     notification::Notification, vm::VM, vmbuilder::VMBuilder,
 };
-use crate::{KVM_ENABLED, firmware};
+use crate::{KUDU_BRIDGE_INTERFACE, KVM_ENABLED, USER_UID, firmware};
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -197,6 +199,33 @@ impl App {
                 }
             }
             _ => {}
+        }
+
+        if unsafe { USER_UID == 0 } {
+            let qemu_bridge_conf_path = PathBuf::from("/etc/qemu/bridge.conf");
+
+            if qemu_bridge_conf_path.exists() {
+                let content = fs::read_to_string(&qemu_bridge_conf_path)?;
+
+                if !content.contains(&format!("allow {}", KUDU_BRIDGE_INTERFACE)) {
+                    let mut file = File::options().append(true).open(qemu_bridge_conf_path)?;
+                    writeln!(&mut file, "allow {}", KUDU_BRIDGE_INTERFACE)?;
+                }
+            } else {
+                if !PathBuf::from("/etc/qemu/").exists() {
+                    fs::create_dir("/etc/qemu/")?;
+                }
+
+                let mut file = File::options()
+                    .append(true)
+                    .create(true)
+                    .open(qemu_bridge_conf_path)?;
+                writeln!(&mut file, "allow {}", KUDU_BRIDGE_INTERFACE)?;
+            }
+
+            Bridge::add(KUDU_BRIDGE_INTERFACE).with_context(|| {
+                format!("Can not create the bridge interface {KUDU_BRIDGE_INTERFACE}")
+            })?;
         }
 
         which("xorriso").with_context(|| "Please install xorriso package.")?;

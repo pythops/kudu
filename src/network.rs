@@ -1,10 +1,9 @@
-pub mod backend;
+pub mod bridge;
 pub mod builder;
 pub mod port_forwarding;
 
 use serde::{Deserialize, Serialize};
 
-use backend::NetworkBackend;
 use port_forwarding::PortMapping;
 
 pub type NetworkId = String;
@@ -27,6 +26,17 @@ pub enum Nic {
     Virtio,
     E1000,
     RTL8139,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Default, PartialEq, strum::Display, Deserialize, Serialize)]
+pub enum NetworkBackend {
+    #[default]
+    User,
+    Passt,
+    Tap,
+    #[strum(to_string = "Bridge({0})")]
+    Bridge(String),
 }
 
 impl Default for Network {
@@ -58,6 +68,7 @@ impl Network {
             mac,
         }
     }
+
     pub fn to_qemu_arg(&self) -> Vec<String> {
         let id = format!("net{}", self.id);
         let device = ["-device".to_string(), {
@@ -68,7 +79,7 @@ impl Network {
             }
         }];
 
-        match self.backend {
+        match &self.backend {
             NetworkBackend::Passt => {
                 let mapping_arg = self
                     .port_mappings
@@ -117,6 +128,17 @@ impl Network {
                     }
                 }];
 
+                [&device[..], &netdev[..]].concat()
+            }
+            NetworkBackend::Tap => {
+                let netdev = [
+                    "-netdev".to_string(),
+                    format!("tap,id={},ifname=tap{},script=no,downscript=no", id, id),
+                ];
+                [&device[..], &netdev[..]].concat()
+            }
+            NetworkBackend::Bridge(br) => {
+                let netdev = ["-netdev".to_string(), format!("bridge,br={br},id={id}")];
                 [&device[..], &netdev[..]].concat()
             }
         }

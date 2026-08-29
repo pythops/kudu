@@ -23,7 +23,7 @@ use ratatui::{
 };
 
 use crate::{
-    Arch, BootOption, KVM_ENABLED,
+    Arch, BootOption, KUDU_BRIDGE_INTERFACE, KVM_ENABLED,
     access::RemoteAccess,
     cloudinit::Cloudinit,
     event::{
@@ -31,7 +31,7 @@ use crate::{
         Event::{self, Download, VMStarted},
     },
     firmware, get_kudu_data_dir, get_kudu_run_dir,
-    network::Network,
+    network::{Network, NetworkBackend, bridge::Bridge},
     notification::{self, Notification, NotificationLevel},
     os::Os::{self, TempleOS},
     qemu::Qemu,
@@ -498,6 +498,17 @@ impl VM {
                     let _ = sender.send(Event::Notification(Notification::error(e)));
                 }
 
+                if self
+                    .networks
+                    .iter()
+                    .find(|network| {
+                        network.backend == NetworkBackend::Bridge(KUDU_BRIDGE_INTERFACE.into())
+                    })
+                    .is_some()
+                {
+                    let _ = Bridge::up(KUDU_BRIDGE_INTERFACE);
+                }
+
                 let _ = sender.send(VMStarted(self.id));
             }
             Err(e) => {
@@ -753,7 +764,7 @@ impl VM {
                         Span::from("id     ").bold(),
                         Span::from(" ".repeat(7)),
                         Span::from("Backend").bold(),
-                        Span::from(" ".repeat(4)),
+                        Span::from(" ".repeat(12)),
                         Span::from("  Nic  ").bold(),
                         Span::from(" ".repeat(14)),
                         Span::from("  Mac  ").bold(),
@@ -764,8 +775,8 @@ impl VM {
                             Span::from(" ".repeat(17)),
                             Span::from(format!("{:8}", network.id)),
                             Span::from(" ".repeat(6)),
-                            Span::from(format!("{:7}", network.backend)),
-                            Span::from(" ".repeat(6)),
+                            Span::from(format!("{:14}", network.backend)),
+                            Span::from(" ".repeat(7)),
                             Span::from(format!("{:14}", network.nic)),
                             Span::from(" ".repeat(7)),
                             Span::from(format!(

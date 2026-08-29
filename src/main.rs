@@ -3,6 +3,7 @@ use std::{io, thread, time::Duration};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use kudu::{
+    USER_UID,
     app::{App, FocusedSection},
     event::{
         DownloadEvent,
@@ -32,6 +33,8 @@ fn main() -> Result<()> {
         println!("kudu only runs on Linux");
         return Ok(());
     }
+
+    unsafe { USER_UID = libc::geteuid() };
 
     let backend = CrosstermBackend::new(io::stdout());
     let terminal = Terminal::new(backend)?;
