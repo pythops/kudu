@@ -11,7 +11,6 @@ use std::{
     process::{Command, Stdio},
     sync::{Arc, atomic::AtomicBool, mpsc::Sender},
     thread::{self},
-    time::Duration,
 };
 use which::which;
 
@@ -102,6 +101,10 @@ impl VM {
 
                         let vm_events_path = VM::get_events_file(vm.id);
                         Qemu::events(vm_events_path, vm.id, sender.clone());
+                    } else {
+                        for drive in &mut vm.drives {
+                            drive.size = Drive::size(&drive.path).ok();
+                        }
                     }
 
                     vm.load_events_from_file()?;
@@ -439,8 +442,6 @@ impl VM {
                     let _ = sender.send(Event::Notification(Notification::error(e)));
                 }
 
-                thread::sleep(Duration::from_millis(200));
-
                 if Some(TempleOS) == self.os {
                     let drive = Drive {
                         path: self.get_boot_file(),
@@ -738,7 +739,13 @@ impl VM {
                             Span::from(" ".repeat(17)),
                             Span::from(index.to_string()),
                             Span::from(" ".repeat(4)),
-                            Span::from(format!("{:3}GiB", disk.size.unwrap())),
+                            Span::from({
+                                if let Some(size) = disk.size {
+                                    format!("{:3}GiB", size)
+                                } else {
+                                    "-".to_string()
+                                }
+                            }),
                             Span::from(" ".repeat(8)),
                             Span::from(disk.format.to_string()),
                             Span::from(" ".repeat(7)),
