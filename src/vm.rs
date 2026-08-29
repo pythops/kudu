@@ -11,6 +11,7 @@ use std::{
     process::{Command, Stdio},
     sync::{Arc, atomic::AtomicBool, mpsc::Sender},
     thread::{self},
+    time::Duration,
 };
 use which::which;
 
@@ -437,6 +438,8 @@ impl VM {
                 {
                     let _ = sender.send(Event::Notification(Notification::error(e)));
                 }
+
+                thread::sleep(Duration::from_millis(200));
 
                 if Some(TempleOS) == self.os {
                     let drive = Drive {
