@@ -179,7 +179,7 @@ impl VM {
                 format: Format::Raw,
                 read_only: true,
                 unit: None,
-                size: None,
+                size: Drive::size(&path).ok(),
             };
             drives.push(drive);
             path.pop();
@@ -230,7 +230,7 @@ impl VM {
                 media: Media::Disk,
                 read_only: false,
                 unit: None,
-                size: Some(disk.size),
+                size: Drive::size(&path).ok(),
             };
 
             drives.push(drive);
@@ -238,7 +238,6 @@ impl VM {
         }
 
         if let Some(path) = data.boot_file {
-            let size = Some(Drive::size(&path).unwrap());
             let format = Drive::format(&path).unwrap();
             let (media, read_only) = if format == Format::Qcow2 {
                 (Media::Disk, false)
@@ -253,7 +252,7 @@ impl VM {
                 media,
                 read_only,
                 unit: None,
-                size,
+                size: Drive::size(&path).ok(),
             };
 
             drives.push(drive);
@@ -320,7 +319,7 @@ impl VM {
                 media: Media::Disk,
                 read_only: false,
                 unit: None,
-                size: Some(disk.size),
+                size: Drive::size(&path).ok(),
             };
 
             self.drives.push(drive);
@@ -741,7 +740,17 @@ impl VM {
                             Span::from(" ".repeat(4)),
                             Span::from({
                                 if let Some(size) = disk.size {
-                                    format!("{:3}GiB", size)
+                                    match size {
+                                        0..1_000_000 => {
+                                            format!("{:3}KiB", size / 1024)
+                                        }
+                                        1_000_000..1_000_000_000 => {
+                                            format!("{:3}MiB", size / (1024 * 1024))
+                                        }
+                                        _ => {
+                                            format!("{:3}GiB", size / (1024 * 1024 * 1024))
+                                        }
+                                    }
                                 } else {
                                     "-".to_string()
                                 }

@@ -147,7 +147,17 @@ impl StorageEdit {
                 drive.format.to_string(),
                 {
                     if let Some(size) = drive.size {
-                        format!("{} GiB", size)
+                        match size {
+                            0..1_000_000 => {
+                                format!("{:3}KiB", size / 1024)
+                            }
+                            1_000_000..1_000_000_000 => {
+                                format!("{:3}MiB", size / (1024 * 1024))
+                            }
+                            _ => {
+                                format!("{:3}GiB", size / (1024 * 1024 * 1024))
+                            }
+                        }
                     } else {
                         "-".to_string()
                     }
