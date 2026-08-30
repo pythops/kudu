@@ -294,7 +294,7 @@ impl VM {
         self.vcpu = data.new_vcpu;
         self.memory = data.new_memory;
 
-        for path in data.deleted_disks {
+        for path in data.deleted_drive_paths {
             if path.exists() {
                 fs::remove_file(&path)
                     .with_context(|| format!("can not remove {}", path.to_string_lossy()))?;

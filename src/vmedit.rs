@@ -1,5 +1,6 @@
 pub mod network;
 pub mod port;
+pub mod storage;
 use anyhow::Result;
 use std::{cell::RefCell, path::PathBuf, rc::Rc, sync::mpsc::Sender};
 
@@ -10,9 +11,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span, Text},
-    widgets::{
-        Block, BorderType, Borders, Clear, List, ListItem, ListState, Row, Table, TableState,
-    },
+    widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState},
 };
 use tui_input::{Input, backend::crossterm::EventHandler};
 
@@ -21,7 +20,7 @@ use crate::{
     access::{RemoteAccess, vnc::VncBuilder},
     event::Event,
     network::Network,
-    storage::{Disk, DiskBuilder, Media},
+    storage::{Disk, Drive, Interface},
     vm::{VM, VmId},
 };
 
@@ -66,10 +65,7 @@ pub struct EditVM {
     section_state: ListState,
     vcpu: UserInputField,
     memory: UserInputField,
-    disk_state: TableState,
-    pub new_disk: Option<DiskBuilder>,
-    added_disks: Vec<Disk>,
-    deleted_disks: Vec<PathBuf>,
+    storage: storage::StorageEdit,
     network: network::NetworkEdit,
     port_forwarding: port::PortForwarding,
     vnc: VncBuilder,
@@ -79,7 +75,7 @@ pub struct EditVM {
 #[derive(Debug, Clone)]
 pub struct VMEditData {
     pub id: VmId,
-    pub deleted_disks: Vec<PathBuf>,
+    pub deleted_drive_paths: Vec<PathBuf>,
     pub added_disks: Vec<Disk>,
     pub new_vcpu: u16,
     pub new_memory: u32,
@@ -89,13 +85,6 @@ pub struct VMEditData {
 
 impl EditVM {
     pub fn new(vm: &VM) -> Self {
-        let disks = vm.disks();
-        let disk_state = if disks.is_empty() {
-            TableState::default()
-        } else {
-            TableState::default().with_selected(Some(0))
-        };
-
         let vnc = if let Some(RemoteAccess::Vnc(vnc)) = &vm.remote_access {
             VncBuilder::new(true, vnc.host, vnc.password.clone())
         } else {
@@ -106,6 +95,13 @@ impl EditVM {
         };
 
         let networks = Rc::new(RefCell::new(vm.networks.clone()));
+
+        let drives: Vec<Drive> = vm
+            .drives
+            .clone()
+            .into_iter()
+            .filter(|drive| drive.interface != Interface::Pflash)
+            .collect();
 
         Self {
             section: Section::Hardware(HardwareSection::Cpu),
@@ -118,10 +114,7 @@ impl EditVM {
                 field: Input::from(vm.memory.to_string()),
                 error: None,
             },
-            disk_state,
-            new_disk: None,
-            added_disks: Vec::new(),
-            deleted_disks: Vec::new(),
+            storage: storage::StorageEdit::new(drives),
             network: network::NetworkEdit::new(networks.clone()),
             port_forwarding: port::PortForwarding::new(networks),
             vnc,
@@ -131,7 +124,7 @@ impl EditVM {
 
     pub fn new_popup(&self) -> bool {
         self.port_forwarding.new_mapping_popup()
-            | self.new_disk.is_some()
+            | self.storage.new_drive_popup()
             | self.network.new_network_popup()
     }
 
@@ -189,28 +182,8 @@ impl EditVM {
         arch: Arch,
         sender: Sender<Event>,
     ) -> Result<()> {
-        if let Some(new_disk) = &mut self.new_disk {
-            match key_event.code {
-                KeyCode::Esc => {
-                    self.new_disk = None;
-                }
-                KeyCode::Enter => {
-                    if new_disk.validate() {
-                        let disk = new_disk.build();
-                        self.added_disks.push(disk);
-                        self.new_disk = None;
-
-                        if self.disk_state.selected().is_none() {
-                            self.disk_state.select(Some(0));
-                        }
-                    }
-                }
-
-                _ => {
-                    new_disk.handle_key_events(key_event, arch);
-                }
-            }
-
+        if self.storage.new_drive_popup() {
+            self.storage.handle_key_events(key_event, arch);
             return Ok(());
         }
 
@@ -241,8 +214,8 @@ impl EditVM {
 
                 let _ = sender.send(Event::VMEdited(VMEditData {
                     id: self.vm.id,
-                    deleted_disks: self.deleted_disks.clone(),
-                    added_disks: self.added_disks.clone(),
+                    deleted_drive_paths: self.storage.deleted_drive_paths(),
+                    added_disks: self.storage.added_disks(),
                     new_vcpu: self.vcpu.field.value().parse::<u16>().unwrap(),
                     new_memory: self.memory.field.value().parse::<u32>().unwrap(),
                     networks,
@@ -321,46 +294,9 @@ impl EditVM {
                         }
                     },
                 },
-                Section::Storage => match key_event.code {
-                    KeyCode::Char('j') | KeyCode::Down => {
-                        if let Some(index) = self.disk_state.selected() {
-                            self.disk_state.select(Some(
-                                index
-                                    .saturating_add(1)
-                                    .min(self.vm.disks().len() + self.added_disks.len() - 1),
-                            ));
-                        }
-                    }
-                    KeyCode::Char('k') | KeyCode::Up => {
-                        if let Some(index) = self.disk_state.selected() {
-                            self.disk_state.select(Some(index.saturating_sub(1)));
-                        }
-                    }
-                    KeyCode::Char('d') => {
-                        if let Some(index) = self.disk_state.selected() {
-                            let vm_disks = self.vm.disks();
-
-                            if index < vm_disks.len() {
-                                let disk = &vm_disks[index];
-                                self.deleted_disks.push(disk.path.clone());
-                            } else {
-                                let index = index.saturating_sub(vm_disks.len());
-                                self.added_disks.remove(index);
-                            }
-                        }
-                    }
-                    KeyCode::Char('u') => {
-                        if let Some(index) = self.disk_state.selected()
-                            && let Some(disk) = self.vm.disks().get(index)
-                        {
-                            self.deleted_disks.retain(|path| &disk.path != path);
-                        }
-                    }
-                    KeyCode::Char('n') => {
-                        self.new_disk = Some(DiskBuilder::new());
-                    }
-                    _ => {}
-                },
+                Section::Storage => {
+                    self.storage.handle_key_events(key_event, arch);
+                }
                 Section::Network => {
                     self.network.handle_key_events(key_event);
                 }
@@ -574,92 +510,7 @@ impl EditVM {
                 }
             }
             Section::Storage => {
-                // disks
-                let widths = [
-                    Constraint::Length(5),
-                    Constraint::Length(10),
-                    Constraint::Length(10),
-                    Constraint::Length(10),
-                    Constraint::Length(10),
-                    Constraint::Length(15),
-                ];
-
-                let vm_disks = self.vm.disks();
-                let vm_disks = vm_disks.iter().map(|disk| {
-                    let to_delete = self.deleted_disks.contains(&disk.path);
-                    Row::new(vec![
-                        {
-                            if to_delete {
-                                "Del".to_string()
-                            } else {
-                                String::new()
-                            }
-                        },
-                        {
-                            match disk.media {
-                                Media::Disk => "Disk    ".to_string(),
-                                Media::CdRom => "Cdrom   ".to_string(),
-                            }
-                        },
-                        disk.format.to_string(),
-                        {
-                            if let Some(size) = disk.size {
-                                format!("{} GiB", size)
-                            } else {
-                                "-".to_string()
-                            }
-                        },
-                        disk.interface.to_string(),
-                        {
-                            match disk.media {
-                                Media::Disk => "-".to_string(),
-                                Media::CdRom => disk
-                                    .path
-                                    .file_name()
-                                    .unwrap_or_default()
-                                    .to_string_lossy()
-                                    .to_string(),
-                            }
-                        },
-                    ])
-                    .style(if to_delete {
-                        Style::new().red()
-                    } else {
-                        Style::default()
-                    })
-                });
-
-                let new_disks = self.added_disks.iter().map(|disk| {
-                    Row::new(vec![
-                        "New".to_string(),
-                        "Disk    ".to_string(),
-                        disk.format.to_string(),
-                        format!("{} GiB", disk.size),
-                        disk.interface.to_string(),
-                        "-".to_string(),
-                    ])
-                    .green()
-                });
-
-                let mut drives: Vec<Row> = Vec::new();
-                drives.extend(vm_disks);
-                drives.extend(new_disks);
-
-                let disks = Table::new(drives, widths)
-                    .header(
-                        Row::new(vec!["", "Type", "Format", "Size", "Interface", "File Name"])
-                            .style(Style::new().bold())
-                            .bottom_margin(1),
-                    )
-                    .flex(ratatui::layout::Flex::SpaceBetween)
-                    .row_highlight_style(Style::new().on_dark_gray())
-                    .column_spacing(1);
-
-                frame.render_stateful_widget(disks, area, &mut self.disk_state);
-
-                if let Some(new_disk) = &self.new_disk {
-                    new_disk.render(frame);
-                }
+                self.storage.render(frame, area);
             }
             Section::Network => {
                 self.network.render(frame, area);
