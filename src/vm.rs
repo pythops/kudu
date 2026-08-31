@@ -326,6 +326,13 @@ impl VM {
             path.pop();
         }
 
+        for (path, new_size) in &data.resized_drives {
+            if let Some(drive) = self.drives.iter_mut().find(|d| &d.path == path) {
+                Drive::resize(path, drive.format, new_size)?;
+                drive.size = Drive::size(path).ok();
+            }
+        }
+
         self.remote_access = data.remote_access;
 
         self.networks = data.networks;

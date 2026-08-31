@@ -2,7 +2,7 @@ pub mod network;
 pub mod port;
 pub mod storage;
 use anyhow::Result;
-use std::{cell::RefCell, path::PathBuf, rc::Rc, sync::mpsc::Sender};
+use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc, sync::mpsc::Sender};
 
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -77,6 +77,7 @@ pub struct VMEditData {
     pub id: VmId,
     pub deleted_drive_paths: Vec<PathBuf>,
     pub added_disks: Vec<Disk>,
+    pub resized_drives: HashMap<PathBuf, String>,
     pub new_vcpu: u16,
     pub new_memory: u32,
     pub networks: Vec<Network>,
@@ -216,6 +217,7 @@ impl EditVM {
                     id: self.vm.id,
                     deleted_drive_paths: self.storage.deleted_drive_paths(),
                     added_disks: self.storage.added_disks(),
+                    resized_drives: self.storage.resized_drives(),
                     new_vcpu: self.vcpu.field.value().parse::<u16>().unwrap(),
                     new_memory: self.memory.field.value().parse::<u32>().unwrap(),
                     networks,

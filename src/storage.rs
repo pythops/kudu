@@ -4,7 +4,10 @@ use crossterm::event::{
 };
 use rustix::path::Arg;
 use serde::{Deserialize, Serialize};
-use std::{path::Path, process::Command};
+use std::{
+    path::Path,
+    process::{Command, Stdio},
+};
 
 use anyhow::Result;
 use ratatui::{
@@ -44,6 +47,31 @@ impl Drive {
         let output = String::from_utf8(output.stdout)?;
         let output: Value = serde_json::from_str(&output)?;
         Ok(output["virtual-size"].as_u64().unwrap())
+    }
+
+    pub fn resize(path: &Path, format: Format, new_size: &str) -> Result<()> {
+        let mut command = Command::new("qemu-img");
+        command.arg("resize");
+
+        if new_size.starts_with('-') {
+            command.arg("--shrink");
+        }
+        command
+            .arg("-f")
+            .arg(format.to_string())
+            .arg(path)
+            .arg(new_size);
+        command.stdout(Stdio::null());
+        command.stderr(Stdio::piped());
+
+        let output = command.output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(anyhow::anyhow!(stderr));
+        }
+
+        Ok(())
     }
 
     pub fn format(path: &Path) -> Result<Format> {

@@ -1,13 +1,16 @@
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use crossterm::event::{KeyCode, KeyEvent};
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Rect},
+    layout::{Constraint, Direction, Layout, Margin, Rect},
     style::{Style, Stylize},
-    widgets::{Row, Table, TableState},
+    text::Span,
+    widgets::{Block, BorderType, Borders, Clear, Row, Table, TableState},
 };
+use regex::Regex;
+use tui_input::{Input, backend::crossterm::EventHandler};
 
 use crate::storage::Drive;
 use crate::{
@@ -19,7 +22,9 @@ use crate::{
 pub(super) struct StorageEdit {
     drive_state: TableState,
     new_drive: Option<DiskBuilder>,
+    drive_resize: Option<DriveResize>,
     added_disks: Vec<Disk>,
+    resized_drives: HashMap<PathBuf, String>,
     deleted_drive_paths: Vec<PathBuf>,
     drives: Vec<Drive>,
 }
@@ -37,12 +42,14 @@ impl StorageEdit {
             new_drive: None,
             added_disks: Vec::new(),
             deleted_drive_paths: Vec::new(),
+            resized_drives: HashMap::new(),
+            drive_resize: None,
             drives,
         }
     }
 
     pub fn new_drive_popup(&self) -> bool {
-        self.new_drive.is_some()
+        self.new_drive.is_some() | self.drive_resize.is_some()
     }
 
     pub fn deleted_drive_paths(&self) -> Vec<PathBuf> {
@@ -51,6 +58,10 @@ impl StorageEdit {
 
     pub fn added_disks(&self) -> Vec<Disk> {
         self.added_disks.clone()
+    }
+
+    pub fn resized_drives(&self) -> HashMap<PathBuf, String> {
+        self.resized_drives.clone()
     }
 
     pub fn handle_key_events(&mut self, key_event: KeyEvent, arch: Arch) {
@@ -73,6 +84,31 @@ impl StorageEdit {
 
                 _ => {
                     new_drive.handle_key_events(key_event, arch);
+                }
+            }
+
+            return;
+        }
+
+        if let Some(resize) = &mut self.drive_resize {
+            match key_event.code {
+                KeyCode::Esc => {
+                    self.drive_resize = None;
+                }
+
+                KeyCode::Enter => {
+                    if let Some(new_size) = resize.apply() {
+                        if let Some(index) = self.drive_state.selected()
+                            && let Some(drive) = self.drives.get(index)
+                        {
+                            self.resized_drives.insert(drive.path.clone(), new_size);
+                        }
+                        self.drive_resize = None;
+                    }
+                }
+
+                _ => {
+                    resize.handle_key_events(key_event);
                 }
             }
 
@@ -109,10 +145,19 @@ impl StorageEdit {
                     && let Some(drive) = self.drives.get(index)
                 {
                     self.deleted_drive_paths.retain(|path| &drive.path != path);
+                    self.resized_drives.retain(|path, _| &drive.path != path);
                 }
             }
             KeyCode::Char('n') => {
                 self.new_drive = Some(DiskBuilder::new());
+            }
+
+            KeyCode::Char('r') => {
+                if let Some(index) = self.drive_state.selected()
+                    && let Some(drive) = self.drives.get(index)
+                {
+                    self.drive_resize = Some(DriveResize::new(drive));
+                }
             }
             _ => {}
         }
@@ -120,7 +165,7 @@ impl StorageEdit {
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
         let widths = [
-            Constraint::Length(5),
+            Constraint::Length(6),
             Constraint::Length(10),
             Constraint::Length(10),
             Constraint::Length(10),
@@ -130,10 +175,13 @@ impl StorageEdit {
 
         let vm_drives = self.drives.iter().map(|drive| {
             let to_delete = self.deleted_drive_paths.contains(&drive.path);
+            let resized = self.resized_drives.contains_key(&drive.path);
             Row::new(vec![
                 {
                     if to_delete {
-                        "Del".to_string()
+                        "Delete".to_string()
+                    } else if resized {
+                        "Resize".to_string()
                     } else {
                         String::new()
                     }
@@ -172,6 +220,8 @@ impl StorageEdit {
             ])
             .style(if to_delete {
                 Style::new().red()
+            } else if resized {
+                Style::new().yellow()
             } else {
                 Style::default()
             })
@@ -207,6 +257,161 @@ impl StorageEdit {
 
         if let Some(new_drive) = &self.new_drive {
             new_drive.render(frame);
+        }
+
+        if let Some(resize) = &self.drive_resize {
+            resize.render(frame);
+        }
+    }
+}
+
+// Resize
+#[derive(Debug, Clone)]
+pub struct DriveResize {
+    drive: Drive,
+    new_size: UserInputField,
+}
+
+#[derive(Debug, Clone, Default)]
+struct UserInputField {
+    field: Input,
+    error: Option<String>,
+}
+
+impl DriveResize {
+    pub fn new(drive: &Drive) -> Self {
+        Self {
+            drive: drive.clone(),
+            new_size: UserInputField {
+                field: Input::default(),
+                error: None,
+            },
+        }
+    }
+
+    pub fn handle_key_events(&mut self, key_event: KeyEvent) {
+        self.new_size
+            .field
+            .handle_event(&crossterm::event::Event::Key(key_event));
+    }
+
+    fn validate(&mut self) -> bool {
+        let mut valid = true;
+
+        let input = self.new_size.field.value();
+
+        if input.is_empty() {
+            self.new_size.error = Some("Field required".into());
+            valid = false;
+        } else {
+            let regex = Regex::new(r"[\+-]?\d+[KMG]").unwrap();
+            if !regex.is_match(input) {
+                self.new_size.error = Some("Invalid input".into());
+                valid = false;
+            }
+        }
+
+        valid
+    }
+
+    fn apply(&mut self) -> Option<String> {
+        if self.validate() {
+            Some(self.new_size.field.value().to_string())
+        } else {
+            None
+        }
+    }
+    pub fn render(&self, frame: &mut Frame) {
+        let area = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Fill(1),
+                Constraint::Length(12),
+                Constraint::Fill(1),
+            ])
+            .margin(1)
+            .split(frame.area())[1];
+
+        let area = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Fill(1),
+                Constraint::Length(60),
+                Constraint::Fill(1),
+            ])
+            .margin(1)
+            .split(area)[1];
+
+        frame.render_widget(Clear, area);
+
+        frame.render_widget(
+            Block::new()
+                .borders(Borders::all())
+                .title(" Resize 󰩨  ")
+                .border_type(BorderType::Thick)
+                .title_alignment(ratatui::layout::HorizontalAlignment::Center)
+                .border_style(Style::default().yellow()),
+            area,
+        );
+
+        let area = area.inner(Margin {
+            horizontal: 8,
+            vertical: 2,
+        });
+
+        let rows = [
+            Row::new(vec![
+                Span::from("Current Size").bold(),
+                Span::from({
+                    if let Some(size) = self.drive.size {
+                        match size {
+                            0..1_000_000 => {
+                                format!("{:3}KiB", size / 1024)
+                            }
+                            1_000_000..1_000_000_000 => {
+                                format!("{:3}MiB", size / (1024 * 1024))
+                            }
+                            _ => {
+                                format!("{:3}GiB", size / (1024 * 1024 * 1024))
+                            }
+                        }
+                    } else {
+                        "-".to_string()
+                    }
+                }),
+            ]),
+            Row::new(vec!["", ""]),
+            Row::new(vec![
+                Span::from("New Size").bold(),
+                Span::from({
+                    let original_length = self.new_size.field.to_string().len();
+                    let target_length = 30_usize;
+
+                    self.new_size
+                        .field
+                        .to_string()
+                        .chars()
+                        .chain(std::iter::repeat_n(
+                            ' ',
+                            target_length.saturating_sub(original_length),
+                        ))
+                        .collect::<String>()
+                })
+                .on_dark_gray(),
+            ]),
+            Row::new(vec![
+                Span::from(""),
+                Span::from(self.new_size.clone().error.unwrap_or("".to_string())).red(),
+            ]),
+        ];
+        let widths = [Constraint::Length(14), Constraint::Length(30)];
+        let table = Table::new(rows, widths);
+        frame.render_widget(table, area);
+
+        if self.new_size.field.visual_cursor() < 30 {
+            let x = area.x + self.new_size.field.visual_cursor() as u16 + 15;
+            let y = area.y + 2;
+            frame.set_cursor_position((x, y));
         }
     }
 }
