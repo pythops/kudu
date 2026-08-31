@@ -134,6 +134,7 @@ impl StorageEdit {
                     if index < self.drives.len() {
                         let drive = &self.drives[index];
                         self.deleted_drive_paths.push(drive.path.clone());
+                        self.resized_drives.retain(|path, _| &drive.path != path);
                     } else {
                         let index = index.saturating_sub(self.drives.len());
                         self.added_disks.remove(index);
@@ -155,6 +156,8 @@ impl StorageEdit {
             KeyCode::Char('r') => {
                 if let Some(index) = self.drive_state.selected()
                     && let Some(drive) = self.drives.get(index)
+                    && !self.deleted_drive_paths.contains(&drive.path)
+                    && !self.resized_drives.contains_key(&drive.path)
                 {
                     self.drive_resize = Some(DriveResize::new(drive));
                 }
