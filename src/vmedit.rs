@@ -546,6 +546,7 @@ impl EditVM {
                     Span::from(" Nav"),
                 ])]
             }
+            Section::Storage if self.storage.new_drive_popup() => self.storage.help(),
             _ => {
                 if self.new_popup() {
                     vec![Line::from(vec![

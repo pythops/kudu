@@ -1,7 +1,10 @@
 use std::{collections::HashMap, path::PathBuf};
 
+use anyhow::Result;
+use anyhow::anyhow;
 use crossterm::event::{KeyCode, KeyEvent};
 
+use ratatui::text::Line;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Margin, Rect},
@@ -166,12 +169,72 @@ impl StorageEdit {
         }
     }
 
+    fn new_size_to_u16(current_size: u64, new_size: &str) -> Result<u64> {
+        let re = Regex::new(r"([\+-]?)(\d+)([KMG])").unwrap();
+
+        let caps = re.captures(new_size).unwrap();
+
+        let sign = caps.get(1).unwrap().as_str();
+        let value = caps.get(2).unwrap().as_str();
+        let value = value.parse::<u64>().unwrap();
+        let unit = caps.get(3).unwrap().as_str();
+
+        match unit {
+            "G" => {
+                let value = value * 1024 * 1024 * 1024;
+                match sign {
+                    "+" => Ok(current_size + value),
+                    "-" => {
+                        if current_size < value {
+                            Err(anyhow!("The end size can not be negative"))
+                        } else {
+                            Ok(current_size - value)
+                        }
+                    }
+                    "" => Ok(value),
+                    _ => unreachable!(),
+                }
+            }
+            "M" => {
+                let value = value * 1024 * 1024;
+                match sign {
+                    "+" => Ok(current_size + value),
+                    "-" => {
+                        if current_size < value {
+                            Err(anyhow!("The end size can not be negative"))
+                        } else {
+                            Ok(value - current_size)
+                        }
+                    }
+                    "" => Ok(value),
+                    _ => unreachable!(),
+                }
+            }
+            "K" => {
+                let value = value * 1024;
+                match sign {
+                    "+" => Ok(current_size + value),
+                    "-" => {
+                        if current_size < value {
+                            Err(anyhow!("The end size can not be negative"))
+                        } else {
+                            Ok(value - current_size)
+                        }
+                    }
+                    "" => Ok(value),
+                    _ => unreachable!(),
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
         let widths = [
             Constraint::Length(6),
             Constraint::Length(10),
             Constraint::Length(10),
-            Constraint::Length(10),
+            Constraint::Length(16),
             Constraint::Length(10),
             Constraint::Length(15),
         ];
@@ -180,7 +243,7 @@ impl StorageEdit {
             let to_delete = self.deleted_drive_paths.contains(&drive.path);
             let resized = self.resized_drives.contains_key(&drive.path);
             Row::new(vec![
-                {
+                Line::from({
                     if to_delete {
                         "Delete".to_string()
                     } else if resized {
@@ -188,38 +251,39 @@ impl StorageEdit {
                     } else {
                         String::new()
                     }
-                },
-                {
+                }),
+                Line::from({
                     match drive.media {
                         Media::Disk => "Disk    ".to_string(),
                         Media::CdRom => "Cdrom   ".to_string(),
                     }
-                },
-                drive.format.to_string(),
-                {
+                }),
+                Line::from(drive.format.to_string()),
+                Line::from({
                     if let Some(size) = drive.size {
-                        match size {
-                            0..1_000_000 => {
-                                format!("{:3}KiB", size / 1024)
-                            }
-                            1_000_000..1_000_000_000 => {
-                                format!("{:3}MiB", size / (1024 * 1024))
-                            }
-                            _ => {
-                                format!("{:3}GiB", size / (1024 * 1024 * 1024))
-                            }
+                        if resized {
+                            let new_size = self.resized_drives.get(&drive.path).unwrap();
+                            let new_size = Self::new_size_to_u16(size, new_size).unwrap();
+                            let new_size = Drive::format_size(new_size);
+                            let size = Drive::format_size(size);
+                            format!("{size} -> {new_size}")
+                        } else {
+                            Drive::format_size(size)
                         }
                     } else {
                         "-".to_string()
                     }
-                },
-                drive.interface.to_string(),
-                drive
-                    .path
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string(),
+                })
+                .centered(),
+                Line::from(drive.interface.to_string()),
+                Line::from(
+                    drive
+                        .path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string(),
+                ),
             ])
             .style(if to_delete {
                 Style::new().red()
@@ -248,9 +312,16 @@ impl StorageEdit {
 
         let disks = Table::new(drives, widths)
             .header(
-                Row::new(vec!["", "Type", "Format", "Size", "Interface", "File Name"])
-                    .style(Style::new().bold())
-                    .bottom_margin(1),
+                Row::new(vec![
+                    Line::from(""),
+                    Line::from("Type"),
+                    Line::from("Format"),
+                    Line::from("Size").centered(),
+                    Line::from("Interface"),
+                    Line::from("File Name"),
+                ])
+                .style(Style::new().bold())
+                .bottom_margin(1),
             )
             .flex(ratatui::layout::Flex::SpaceBetween)
             .row_highlight_style(Style::new().on_dark_gray())
@@ -264,6 +335,37 @@ impl StorageEdit {
 
         if let Some(resize) = &self.drive_resize {
             resize.render(frame);
+        }
+    }
+    pub fn help(&self) -> Vec<Line<'static>> {
+        if self.new_drive.is_some() {
+            vec![Line::from(vec![
+                Span::from("k,↑").bold(),
+                Span::from("  Up"),
+                Span::from(" | "),
+                Span::from("j,↓").bold(),
+                Span::from("  Down"),
+                Span::from(" | "),
+                Span::from("h,←").bold(),
+                Span::from("  Left"),
+                Span::from(" | "),
+                Span::from("l,→").bold(),
+                Span::from("  Right"),
+                Span::from(" | "),
+                Span::from("Esc").bold(),
+                Span::from(" Cancel"),
+                Span::from(" | "),
+                Span::from("Enter").bold(),
+                Span::from(" Confirm"),
+            ])]
+        } else {
+            vec![Line::from(vec![
+                Span::from("Esc").bold(),
+                Span::from(" Cancel"),
+                Span::from(" | "),
+                Span::from("Enter").bold(),
+                Span::from(" Confirm"),
+            ])]
         }
     }
 }
@@ -329,7 +431,7 @@ impl DriveResize {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(12),
+                Constraint::Length(10),
                 Constraint::Fill(1),
             ])
             .margin(1)
@@ -367,17 +469,7 @@ impl DriveResize {
                 Span::from("Current Size").bold(),
                 Span::from({
                     if let Some(size) = self.drive.size {
-                        match size {
-                            0..1_000_000 => {
-                                format!("{:3}KiB", size / 1024)
-                            }
-                            1_000_000..1_000_000_000 => {
-                                format!("{:3}MiB", size / (1024 * 1024))
-                            }
-                            _ => {
-                                format!("{:3}GiB", size / (1024 * 1024 * 1024))
-                            }
-                        }
+                        Drive::format_size(size)
                     } else {
                         "-".to_string()
                     }

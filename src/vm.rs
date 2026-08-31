@@ -328,7 +328,7 @@ impl VM {
 
         for (path, new_size) in &data.resized_drives {
             if let Some(drive) = self.drives.iter_mut().find(|d| &d.path == path) {
-                Drive::resize(path, drive.format, new_size)?;
+                Drive::resize(path, drive.format, drive.size.unwrap(), new_size)?;
                 drive.size = Drive::size(path).ok();
             }
         }
@@ -747,17 +747,7 @@ impl VM {
                             Span::from(" ".repeat(4)),
                             Span::from({
                                 if let Some(size) = disk.size {
-                                    match size {
-                                        0..1_000_000 => {
-                                            format!("{:3}KiB", size / 1024)
-                                        }
-                                        1_000_000..1_000_000_000 => {
-                                            format!("{:3}MiB", size / (1024 * 1024))
-                                        }
-                                        _ => {
-                                            format!("{:3}GiB", size / (1024 * 1024 * 1024))
-                                        }
-                                    }
+                                    Drive::format_size(size)
                                 } else {
                                     "-".to_string()
                                 }
