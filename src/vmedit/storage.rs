@@ -5,6 +5,7 @@ use anyhow::anyhow;
 use crossterm::event::{KeyCode, KeyEvent};
 
 use ratatui::text::Line;
+use ratatui::text::Text;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Margin, Rect},
@@ -431,7 +432,7 @@ impl DriveResize {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(10),
+                Constraint::Length(13),
                 Constraint::Fill(1),
             ])
             .margin(1)
@@ -441,7 +442,7 @@ impl DriveResize {
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(60),
+                Constraint::Length(80),
                 Constraint::Fill(1),
             ])
             .margin(1)
@@ -460,9 +461,19 @@ impl DriveResize {
         );
 
         let area = area.inner(Margin {
-            horizontal: 8,
+            horizontal: 4,
             vertical: 2,
         });
+
+        let (area, help_block) = {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Fill(1), Constraint::Fill(1)])
+                .flex(ratatui::layout::Flex::SpaceBetween)
+                .split(area);
+
+            (chunks[0], chunks[1])
+        };
 
         let rows = [
             Row::new(vec![
@@ -502,6 +513,11 @@ impl DriveResize {
         let widths = [Constraint::Length(14), Constraint::Length(30)];
         let table = Table::new(rows, widths);
         frame.render_widget(table, area);
+
+        let help_message =
+            Text::from("[+-]SIZE[KMG]: new image size or amount by which to shrink (-)/grow (+)")
+                .centered();
+        frame.render_widget(help_message, help_block);
 
         if self.new_size.field.visual_cursor() < 30 {
             let x = area.x + self.new_size.field.visual_cursor() as u16 + 15;
