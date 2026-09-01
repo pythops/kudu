@@ -1225,6 +1225,7 @@ dependencies = [
  "qapi",
  "rand 0.10.2",
  "ratatui",
+ "regex",
  "reqwest",
  "rustix",
  "serde",

@@ -179,7 +179,7 @@ impl VM {
                 format: Format::Raw,
                 read_only: true,
                 unit: None,
-                size: None,
+                size: Drive::size(&path).ok(),
             };
             drives.push(drive);
             path.pop();
@@ -230,7 +230,7 @@ impl VM {
                 media: Media::Disk,
                 read_only: false,
                 unit: None,
-                size: Some(disk.size),
+                size: Drive::size(&path).ok(),
             };
 
             drives.push(drive);
@@ -238,7 +238,6 @@ impl VM {
         }
 
         if let Some(path) = data.boot_file {
-            let size = Some(Drive::size(&path).unwrap());
             let format = Drive::format(&path).unwrap();
             let (media, read_only) = if format == Format::Qcow2 {
                 (Media::Disk, false)
@@ -253,7 +252,7 @@ impl VM {
                 media,
                 read_only,
                 unit: None,
-                size,
+                size: Drive::size(&path).ok(),
             };
 
             drives.push(drive);
@@ -294,7 +293,7 @@ impl VM {
         self.vcpu = data.new_vcpu;
         self.memory = data.new_memory;
 
-        for path in data.deleted_disks {
+        for path in data.deleted_drive_paths {
             if path.exists() {
                 fs::remove_file(&path)
                     .with_context(|| format!("can not remove {}", path.to_string_lossy()))?;
@@ -320,11 +319,18 @@ impl VM {
                 media: Media::Disk,
                 read_only: false,
                 unit: None,
-                size: Some(disk.size),
+                size: Drive::size(&path).ok(),
             };
 
             self.drives.push(drive);
             path.pop();
+        }
+
+        for (path, new_size) in &data.resized_drives {
+            if let Some(drive) = self.drives.iter_mut().find(|d| &d.path == path) {
+                Drive::resize(path, drive.format, drive.size.unwrap(), new_size)?;
+                drive.size = Drive::size(path).ok();
+            }
         }
 
         self.remote_access = data.remote_access;
@@ -741,7 +747,7 @@ impl VM {
                             Span::from(" ".repeat(4)),
                             Span::from({
                                 if let Some(size) = disk.size {
-                                    format!("{:3}GiB", size)
+                                    Drive::format_size(size)
                                 } else {
                                     "-".to_string()
                                 }

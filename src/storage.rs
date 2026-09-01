@@ -2,9 +2,13 @@ use crossterm::event::{
     KeyCode::{self},
     KeyEvent,
 };
+use regex::Regex;
 use rustix::path::Arg;
 use serde::{Deserialize, Serialize};
-use std::{path::Path, process::Command};
+use std::{
+    path::Path,
+    process::{Command, Stdio},
+};
 
 use anyhow::Result;
 use ratatui::{
@@ -33,6 +37,19 @@ pub struct Drive {
 }
 
 impl Drive {
+    pub fn format_size(size: u64) -> String {
+        match size {
+            0..1_000_000 => {
+                format!("{:3}KiB", size / 1024)
+            }
+            1_000_000..1_000_000_000 => {
+                format!("{:3}MiB", size / (1024 * 1024))
+            }
+            _ => {
+                format!("{:3}GiB", size / (1024 * 1024 * 1024))
+            }
+        }
+    }
     pub fn size(path: &Path) -> Result<u64> {
         let output = Command::new("qemu-img")
             .arg("info")
@@ -43,7 +60,51 @@ impl Drive {
 
         let output = String::from_utf8(output.stdout)?;
         let output: Value = serde_json::from_str(&output)?;
-        Ok(output["virtual-size"].as_u64().unwrap() / (1024 * 1024 * 1024))
+        Ok(output["virtual-size"].as_u64().unwrap())
+    }
+
+    pub fn resize(path: &Path, format: Format, current_size: u64, new_size: &str) -> Result<()> {
+        let mut command = Command::new("qemu-img");
+        command.arg("resize");
+
+        let shrink = {
+            let re = Regex::new(r"([\+-]?)(\d+)([KMG])").unwrap();
+
+            let caps = re.captures(new_size).unwrap();
+
+            let sign = caps.get(1).unwrap().as_str();
+            let value = caps.get(2).unwrap().as_str();
+            let value = value.parse::<u64>().unwrap();
+            let unit = caps.get(3).unwrap().as_str();
+            let value = match unit {
+                "G" => value * 1024 * 1024 * 1024,
+                "M" => value * 1024 * 1024,
+                "K" => value * 1024,
+                _ => unreachable!(),
+            };
+
+            sign == "-" || (sign.is_empty() && value < current_size)
+        };
+
+        if shrink {
+            command.arg("--shrink");
+        }
+        command
+            .arg("-f")
+            .arg(format.to_string())
+            .arg(path)
+            .arg(new_size);
+        command.stdout(Stdio::null());
+        command.stderr(Stdio::piped());
+
+        let output = command.output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(anyhow::anyhow!(stderr));
+        }
+
+        Ok(())
     }
 
     pub fn format(path: &Path) -> Result<Format> {

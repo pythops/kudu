@@ -32,6 +32,7 @@ which = "8"
 kvm-ioctls = "0.25.0"
 rustix = { version = "1", features = ["fs"] }
 rand = "0.10"
+regex = "1.13"
 
 [profile.release]
 lto = "fat"
