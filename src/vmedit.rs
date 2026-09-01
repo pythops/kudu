@@ -335,7 +335,7 @@ impl EditVM {
             ]),
             ListItem::new(vec![
                 Line::from(""),
-                Line::from(" Port Forwaring   "),
+                Line::from(" Port Forwarding   "),
                 Line::from(""),
             ]),
             ListItem::new(vec![

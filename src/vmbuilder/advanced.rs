@@ -38,7 +38,7 @@ pub struct Advanced {
     pub hardware: hardware::Hardware,
     pub storage: storage::Storage,
     pub network: network::builder::NetworkBuilder,
-    pub port_fowrwaring: port::PortForwaring,
+    pub port_fowrwaring: port::PortForwarding,
     pub remote_access: access::RemoteAccessBuilder,
 }
 
@@ -51,7 +51,7 @@ impl Default for Advanced {
 impl Advanced {
     pub fn new() -> Advanced {
         let network = network::builder::NetworkBuilder::new();
-        let port_fowrwaring = port::PortForwaring::new(network.networks());
+        let port_fowrwaring = port::PortForwarding::new(network.networks());
 
         Self {
             focused_section: Section::Overview,
@@ -227,7 +227,7 @@ impl Advanced {
             ]),
             ListItem::new(vec![
                 Line::from(""),
-                Line::from(" Port Forwaring   "),
+                Line::from(" Port Forwarding   "),
                 Line::from(""),
             ]),
             ListItem::new(vec![

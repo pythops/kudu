@@ -16,16 +16,16 @@ use crate::network::{
 };
 
 #[derive(Debug, Clone)]
-pub struct PortForwaring {
+pub struct PortForwarding {
     mappings: Vec<(NetworkId, PortMapping)>,
     mapping_state: TableState,
     new_mapping: Option<MappingBuilder>,
     networks: Rc<RefCell<Vec<Network>>>,
 }
 
-impl PortForwaring {
+impl PortForwarding {
     pub fn new(networks: Rc<RefCell<Vec<Network>>>) -> Self {
-        PortForwaring {
+        PortForwarding {
             mappings: Vec::new(),
             mapping_state: TableState::new(),
             new_mapping: None,
