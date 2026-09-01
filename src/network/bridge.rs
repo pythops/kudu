@@ -21,7 +21,7 @@ impl Bridge {
                 return Err(Error::last_os_error().into());
             }
 
-            let ret = libc::ioctl(fd, SIOCBRADDBR, c_name.as_ptr());
+            let ret = libc::ioctl(fd, SIOCBRADDBR as libc::Ioctl, c_name.as_ptr());
 
             if ret < 0 {
                 let err = Error::last_os_error();
@@ -54,7 +54,7 @@ impl Bridge {
                 ifr.ifr_name[i] = b as c_char;
             }
 
-            if libc::ioctl(fd, libc::SIOCGIFFLAGS, &mut ifr) < 0 {
+            if libc::ioctl(fd, libc::SIOCGIFFLAGS as libc::Ioctl, &mut ifr) < 0 {
                 let err = Error::last_os_error();
                 libc::close(fd);
                 return Err(err.into());
@@ -62,7 +62,7 @@ impl Bridge {
 
             ifr.ifr_ifru.ifru_flags |= libc::IFF_UP as i16;
 
-            if libc::ioctl(fd, libc::SIOCSIFFLAGS, &ifr) < 0 {
+            if libc::ioctl(fd, libc::SIOCSIFFLAGS as libc::Ioctl, &ifr) < 0 {
                 let err = Error::last_os_error();
                 libc::close(fd);
                 return Err(err.into());
