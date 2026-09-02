@@ -132,7 +132,7 @@ impl PortForwarding {
                 vec![
                     Line::from(vec![
                         Span::from("Port Forwarding ").bold(),
-                        Span::from(" ".repeat(4)),
+                        Span::from(" ".repeat(3)),
                         Span::from(" - "),
                     ]),
                     Line::from(""),

@@ -114,7 +114,7 @@ impl NetworkBuilder {
                 vec![
                     Line::from(vec![
                         Span::from("Networks").bold(),
-                        Span::from(" ".repeat(13)),
+                        Span::from(" ".repeat(11)),
                         Span::from(" - "),
                     ]),
                     Line::from(""),

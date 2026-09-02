@@ -386,6 +386,7 @@ impl Advanced {
                 items.extend(self.overview.summary());
                 items.extend(self.hardware.summary());
                 items.extend(self.storage.summary());
+                items.extend(self.fs.summary());
                 items.extend(self.network.summary());
                 items.extend(self.port_fowrwaring.summary());
                 items.extend(self.remote_access.summary());
