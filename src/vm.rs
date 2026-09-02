@@ -30,7 +30,9 @@ use crate::{
         DownloadEvent,
         Event::{self, Download, VMStarted},
     },
-    firmware, get_kudu_data_dir, get_kudu_run_dir,
+    firmware,
+    fs::Filesystem,
+    get_kudu_data_dir, get_kudu_run_dir,
     network::{Network, NetworkBackend, bridge::Bridge},
     notification::{self, Notification, NotificationLevel},
     os::Os::{self, TempleOS},
@@ -54,6 +56,7 @@ pub struct VM {
     pub drives: Vec<Drive>,
     pub networks: Vec<Network>,
     pub remote_access: Option<RemoteAccess>,
+    pub fs: Vec<Filesystem>,
 
     #[serde(skip)]
     pub downloading: Arc<AtomicBool>,
@@ -272,6 +275,7 @@ impl VM {
             events_state: ListState::default(),
             vnc: None,
             networks: data.networks,
+            fs: data.fs,
             state: RunState::shutdown,
             remote_access: data.remote_access,
         };

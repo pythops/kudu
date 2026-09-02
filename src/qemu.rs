@@ -89,6 +89,10 @@ impl Qemu {
             command.arg("-vnc").arg("none");
         }
 
+        for fs in &vm.fs {
+            command.args(fs.to_qemu_arg());
+        }
+
         command
             .arg("-daemonize")
             .arg("-qmp")

@@ -16,7 +16,7 @@ use crate::{
     event::Event,
     network,
     os::Os::{ArchLinux, TempleOS},
-    vmbuilder::{VMBuildData, access, hardware, overview, port, storage},
+    vmbuilder::{VMBuildData, access, fs, hardware, overview, port, storage},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -24,6 +24,7 @@ pub enum Section {
     Overview,
     Hardware,
     Storage,
+    Filesystem,
     Network,
     PortForwarding,
     RemoteAccess,
@@ -37,6 +38,7 @@ pub struct Advanced {
     pub overview: overview::Overview,
     pub hardware: hardware::Hardware,
     pub storage: storage::Storage,
+    pub fs: fs::FsBuilder,
     pub network: network::builder::NetworkBuilder,
     pub port_fowrwaring: port::PortForwarding,
     pub remote_access: access::RemoteAccessBuilder,
@@ -58,6 +60,7 @@ impl Advanced {
             section_state: ListState::default().with_selected(Some(0)),
             overview: overview::Overview::new(),
             hardware: hardware::Hardware::new(),
+            fs: fs::FsBuilder::new(),
             storage: storage::Storage::new(),
             network,
             port_fowrwaring,
@@ -78,6 +81,7 @@ impl Advanced {
             enable_uefi: self.hardware.enable_uefi(),
             networks: self.network.networks().take(),
             disks: self.storage.disks(),
+            fs: self.fs.filesystems(),
             remote_access: self.remote_access.access(),
         }
     }
@@ -123,7 +127,11 @@ impl Advanced {
                         self.focused_section = Section::Storage;
                     }
                 }
-                Section::Storage => self.focused_section = Section::Network,
+                Section::Storage => self.focused_section = Section::Filesystem,
+                Section::Filesystem => {
+                    self.focused_section = Section::Network;
+                }
+
                 Section::Network => {
                     self.port_fowrwaring.refresh();
                     self.focused_section = Section::PortForwarding
@@ -157,9 +165,12 @@ impl Advanced {
                     }
                 }
                 Section::Storage => self.focused_section = Section::Hardware,
+                Section::Filesystem => {
+                    self.focused_section = Section::Storage;
+                }
                 Section::Network => {
                     self.port_fowrwaring.refresh();
-                    self.focused_section = Section::Storage
+                    self.focused_section = Section::Filesystem
                 }
                 Section::PortForwarding => self.focused_section = Section::Network,
                 Section::RemoteAccess => {
@@ -180,6 +191,9 @@ impl Advanced {
                 Section::Storage => {
                     self.storage
                         .handle_key_events(key_event, self.hardware.arch());
+                }
+                Section::Filesystem => {
+                    self.fs.handle_key_events(key_event);
                 }
                 Section::Network => {
                     self.network.handle_key_events(key_event);
@@ -218,6 +232,11 @@ impl Advanced {
             ListItem::new(vec![
                 Line::from(""),
                 Line::from(" Storage 󱛟  "),
+                Line::from(""),
+            ]),
+            ListItem::new(vec![
+                Line::from(""),
+                Line::from(" Filesystem   "),
                 Line::from(""),
             ]),
             ListItem::new(vec![
@@ -318,6 +337,11 @@ impl Advanced {
             .flex(ratatui::layout::Flex::Center)
             .split(area)[1];
 
+        let area = area.inner(Margin {
+            horizontal: 5,
+            vertical: 2,
+        });
+
         match &self.focused_section {
             Section::Overview => {
                 self.overview.render(frame, area, cancel_popup);
@@ -330,6 +354,10 @@ impl Advanced {
 
             Section::Storage => {
                 self.storage.render(frame, area);
+            }
+
+            Section::Filesystem => {
+                self.fs.render(frame, area);
             }
 
             Section::Network => {
