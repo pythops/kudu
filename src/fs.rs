@@ -17,7 +17,7 @@ use ratatui::{
 
 use crate::fs::Section::ReadOnly;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Filesystem {
     pub driver: FsDriver,
     pub source_path: PathBuf,
@@ -45,7 +45,7 @@ impl Filesystem {
 }
 
 #[non_exhaustive]
-#[derive(Debug, Clone, strum::Display, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, strum::Display, Default, Serialize, Deserialize)]
 pub enum FsDriver {
     #[default]
     #[strum(to_string = "9pfs")]

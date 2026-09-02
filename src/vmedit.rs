@@ -1,3 +1,4 @@
+pub mod fs;
 pub mod network;
 pub mod port;
 pub mod storage;
@@ -19,6 +20,7 @@ use crate::{
     Arch,
     access::{RemoteAccess, vnc::VncBuilder},
     event::Event,
+    fs::Filesystem,
     network::Network,
     storage::{Disk, Drive, Interface},
     vm::{VM, VmId},
@@ -35,6 +37,7 @@ struct UserInputField {
 enum Section {
     Hardware(HardwareSection),
     Storage,
+    Filesystem,
     Network,
     PortForwarding,
     RemoteAccess,
@@ -45,9 +48,10 @@ impl Section {
         match self {
             Section::Hardware(_) => 0,
             Section::Storage => 1,
-            Section::Network => 2,
-            Section::PortForwarding => 3,
-            Section::RemoteAccess => 4,
+            Section::Filesystem => 2,
+            Section::Network => 3,
+            Section::PortForwarding => 4,
+            Section::RemoteAccess => 5,
         }
     }
 }
@@ -66,6 +70,7 @@ pub struct EditVM {
     vcpu: UserInputField,
     memory: UserInputField,
     storage: storage::StorageEdit,
+    fs: fs::FsEdit,
     network: network::NetworkEdit,
     port_forwarding: port::PortForwarding,
     vnc: VncBuilder,
@@ -82,6 +87,7 @@ pub struct VMEditData {
     pub new_memory: u32,
     pub networks: Vec<Network>,
     pub remote_access: Option<RemoteAccess>,
+    pub fs: Vec<Filesystem>,
 }
 
 impl EditVM {
@@ -116,6 +122,7 @@ impl EditVM {
                 error: None,
             },
             storage: storage::StorageEdit::new(drives),
+            fs: fs::FsEdit::new(vm.fs.clone()),
             network: network::NetworkEdit::new(networks.clone()),
             port_forwarding: port::PortForwarding::new(networks),
             vnc,
@@ -127,6 +134,7 @@ impl EditVM {
         self.port_forwarding.new_mapping_popup()
             | self.storage.new_drive_popup()
             | self.network.new_network_popup()
+            | self.fs.new_fs_popup()
     }
 
     fn validate_harware_section(&mut self) -> bool {
@@ -188,6 +196,11 @@ impl EditVM {
             return Ok(());
         }
 
+        if self.fs.new_fs_popup() {
+            self.fs.handle_key_events(key_event);
+            return Ok(());
+        }
+
         if self.network.new_network_popup() {
             self.network.handle_key_events(key_event);
             return Ok(());
@@ -221,6 +234,7 @@ impl EditVM {
                     new_vcpu: self.vcpu.field.value().parse::<u16>().unwrap(),
                     new_memory: self.memory.field.value().parse::<u32>().unwrap(),
                     networks,
+                    fs: self.fs.build(),
                     remote_access: self.vnc.build().map(RemoteAccess::Vnc),
                 }));
             }
@@ -231,6 +245,9 @@ impl EditVM {
                     }
                 }
                 Section::Storage => {
+                    self.section = Section::Filesystem;
+                }
+                Section::Filesystem => {
                     self.section = Section::Network;
                 }
                 Section::Network => {
@@ -252,10 +269,16 @@ impl EditVM {
                         self.section = Section::RemoteAccess;
                     }
                 }
-                Section::Storage => self.section = Section::Hardware(HardwareSection::default()),
+                Section::Storage => {
+                    self.section = Section::Hardware(HardwareSection::default());
+                }
+
+                Section::Filesystem => {
+                    self.section = Section::Storage;
+                }
                 Section::Network => {
                     self.port_forwarding.refresh();
-                    self.section = Section::Storage;
+                    self.section = Section::Filesystem;
                 }
                 Section::PortForwarding => {
                     self.section = Section::Network;
@@ -299,6 +322,11 @@ impl EditVM {
                 Section::Storage => {
                     self.storage.handle_key_events(key_event, arch);
                 }
+
+                Section::Filesystem => {
+                    self.fs.handle_key_events(key_event);
+                }
+
                 Section::Network => {
                     self.network.handle_key_events(key_event);
                 }
@@ -326,6 +354,11 @@ impl EditVM {
             ListItem::new(vec![
                 Line::from(""),
                 Line::from(" Storage 󱛟  "),
+                Line::from(""),
+            ]),
+            ListItem::new(vec![
+                Line::from(""),
+                Line::from(" Filesystem   "),
                 Line::from(""),
             ]),
             ListItem::new(vec![
@@ -513,6 +546,9 @@ impl EditVM {
             }
             Section::Storage => {
                 self.storage.render(frame, area);
+            }
+            Section::Filesystem => {
+                self.fs.render(frame, area);
             }
             Section::Network => {
                 self.network.render(frame, area);

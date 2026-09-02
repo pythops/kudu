@@ -341,6 +341,8 @@ impl VM {
 
         self.networks = data.networks;
 
+        self.fs = data.fs;
+
         path.push("vm.json");
         let mut file = File::create(&path)?;
         let vm = serde_json::to_string_pretty(&self)?;
