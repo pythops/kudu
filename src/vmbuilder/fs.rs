@@ -99,17 +99,30 @@ impl FsBuilder {
             let message = Text::from("Press n to add a shared fs").centered();
             frame.render_widget(message, area);
         } else {
-            let widths = [Constraint::Length(20), Constraint::Length(10)];
+            let widths = [
+                Constraint::Length(20),
+                Constraint::Length(20),
+                Constraint::Length(8),
+                Constraint::Length(10),
+            ];
             let fs = self.fs.iter().map(|fs| {
                 Row::new(vec![
                     fs.source_path.to_string_lossy().to_string(),
+                    fs.mount_tag.clone(),
+                    {
+                        if fs.readonly {
+                            "Yes".to_string()
+                        } else {
+                            "No".to_string()
+                        }
+                    },
                     fs.driver.to_string(),
                 ])
             });
 
             let fs = Table::new(fs, widths)
                 .header(
-                    Row::new(vec!["Source Path", "Driver"])
+                    Row::new(vec!["Source Path", "Mount Tag", "Readonly", "Driver"])
                         .style(Style::new().bold())
                         .bottom_margin(1),
                 )
