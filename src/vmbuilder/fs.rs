@@ -1,6 +1,6 @@
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Flex, Layout, Rect},
+    layout::{Constraint, Direction, Flex, Layout, Margin, Rect},
     style::{Style, Stylize},
     text::{Line, Span, Text},
     widgets::{ListItem, Row, Table, TableState},
@@ -169,7 +169,14 @@ impl FsBuilder {
                 .row_highlight_style(Style::new().on_dark_gray())
                 .column_spacing(1);
 
-            frame.render_stateful_widget(fs, area, &mut self.fs_state);
+            frame.render_stateful_widget(
+                fs,
+                area.inner(Margin {
+                    horizontal: 2,
+                    vertical: 2,
+                }),
+                &mut self.fs_state,
+            );
         }
 
         if let Some(new_fs) = &self.new_fs {

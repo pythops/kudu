@@ -3,7 +3,7 @@ use ratatui::{
     Frame,
     layout::{Constraint, Rect},
     style::{Style, Stylize},
-    text::Line,
+    text::{Line, Span},
     widgets::{Row, Table, TableState},
 };
 
@@ -192,5 +192,27 @@ impl FsEdit {
         if let Some(new_fs) = &self.new_fs {
             new_fs.render(frame);
         }
+    }
+
+    pub fn help(&self) -> Vec<Line<'static>> {
+        vec![Line::from(vec![
+            Span::from("↑").bold(),
+            Span::from("  Up"),
+            Span::from(" | "),
+            Span::from("↓").bold(),
+            Span::from("  Down"),
+            Span::from(" | "),
+            Span::from("h,←").bold(),
+            Span::from("  Left"),
+            Span::from(" | "),
+            Span::from("l,→").bold(),
+            Span::from("  Right"),
+            Span::from(" | "),
+            Span::from("Esc").bold(),
+            Span::from(" Cancel"),
+            Span::from(" | "),
+            Span::from("Enter").bold(),
+            Span::from(" Confirm"),
+        ])]
     }
 }

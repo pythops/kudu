@@ -337,11 +337,6 @@ impl Advanced {
             .flex(ratatui::layout::Flex::Center)
             .split(area)[1];
 
-        let area = area.inner(Margin {
-            horizontal: 5,
-            vertical: 2,
-        });
-
         match &self.focused_section {
             Section::Overview => {
                 self.overview.render(frame, area, cancel_popup);
@@ -435,6 +430,49 @@ impl Advanced {
                         Span::from(" Up"),
                         Span::from(" | "),
                         Span::from("j,↓").bold(),
+                        Span::from(" Down"),
+                        Span::from(" | "),
+                        Span::from("h,←").bold(),
+                        Span::from(" Left"),
+                        Span::from(" | "),
+                        Span::from("l,→").bold(),
+                        Span::from(" Right"),
+                        Span::from(" | "),
+                        Span::from("Esc").bold(),
+                        Span::from(" Cancel"),
+                        Span::from(" | "),
+                        Span::from("Enter").bold(),
+                        Span::from(" Confirm"),
+                    ])]
+                } else {
+                    vec![Line::from(vec![
+                        Span::from("k,↑").bold(),
+                        Span::from(" Up"),
+                        Span::from(" | "),
+                        Span::from("j,↓").bold(),
+                        Span::from(" Down"),
+                        Span::from(" | "),
+                        Span::from("n").bold(),
+                        Span::from(" Add"),
+                        Span::from(" | "),
+                        Span::from("d").bold(),
+                        Span::from(" Delete"),
+                        Span::from(" | "),
+                        Span::from("Esc").bold(),
+                        Span::from(" Cancel"),
+                        Span::from(" | "),
+                        Span::from("⇄").bold(),
+                        Span::from(" Nav"),
+                    ])]
+                }
+            }
+            Section::Filesystem => {
+                if self.fs.new_fs_popup() {
+                    vec![Line::from(vec![
+                        Span::from("↑").bold(),
+                        Span::from(" Up"),
+                        Span::from(" | "),
+                        Span::from("↓").bold(),
                         Span::from(" Down"),
                         Span::from(" | "),
                         Span::from("h,←").bold(),
