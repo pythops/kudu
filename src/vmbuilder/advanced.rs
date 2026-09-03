@@ -16,7 +16,7 @@ use crate::{
     event::Event,
     network,
     os::Os::{ArchLinux, TempleOS},
-    vmbuilder::{VMBuildData, access, hardware, overview, port, storage},
+    vmbuilder::{VMBuildData, access, fs, hardware, overview, port, storage},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -24,6 +24,7 @@ pub enum Section {
     Overview,
     Hardware,
     Storage,
+    Filesystem,
     Network,
     PortForwarding,
     RemoteAccess,
@@ -37,8 +38,9 @@ pub struct Advanced {
     pub overview: overview::Overview,
     pub hardware: hardware::Hardware,
     pub storage: storage::Storage,
+    pub fs: fs::FsBuilder,
     pub network: network::builder::NetworkBuilder,
-    pub port_fowrwaring: port::PortForwaring,
+    pub port_fowrwaring: port::PortForwarding,
     pub remote_access: access::RemoteAccessBuilder,
 }
 
@@ -51,13 +53,14 @@ impl Default for Advanced {
 impl Advanced {
     pub fn new() -> Advanced {
         let network = network::builder::NetworkBuilder::new();
-        let port_fowrwaring = port::PortForwaring::new(network.networks());
+        let port_fowrwaring = port::PortForwarding::new(network.networks());
 
         Self {
             focused_section: Section::Overview,
             section_state: ListState::default().with_selected(Some(0)),
             overview: overview::Overview::new(),
             hardware: hardware::Hardware::new(),
+            fs: fs::FsBuilder::new(),
             storage: storage::Storage::new(),
             network,
             port_fowrwaring,
@@ -78,6 +81,7 @@ impl Advanced {
             enable_uefi: self.hardware.enable_uefi(),
             networks: self.network.networks().take(),
             disks: self.storage.disks(),
+            fs: self.fs.filesystems(),
             remote_access: self.remote_access.access(),
         }
     }
@@ -123,7 +127,11 @@ impl Advanced {
                         self.focused_section = Section::Storage;
                     }
                 }
-                Section::Storage => self.focused_section = Section::Network,
+                Section::Storage => self.focused_section = Section::Filesystem,
+                Section::Filesystem => {
+                    self.focused_section = Section::Network;
+                }
+
                 Section::Network => {
                     self.port_fowrwaring.refresh();
                     self.focused_section = Section::PortForwarding
@@ -157,9 +165,12 @@ impl Advanced {
                     }
                 }
                 Section::Storage => self.focused_section = Section::Hardware,
+                Section::Filesystem => {
+                    self.focused_section = Section::Storage;
+                }
                 Section::Network => {
                     self.port_fowrwaring.refresh();
-                    self.focused_section = Section::Storage
+                    self.focused_section = Section::Filesystem
                 }
                 Section::PortForwarding => self.focused_section = Section::Network,
                 Section::RemoteAccess => {
@@ -180,6 +191,9 @@ impl Advanced {
                 Section::Storage => {
                     self.storage
                         .handle_key_events(key_event, self.hardware.arch());
+                }
+                Section::Filesystem => {
+                    self.fs.handle_key_events(key_event);
                 }
                 Section::Network => {
                     self.network.handle_key_events(key_event);
@@ -222,12 +236,17 @@ impl Advanced {
             ]),
             ListItem::new(vec![
                 Line::from(""),
+                Line::from(" Filesystem   "),
+                Line::from(""),
+            ]),
+            ListItem::new(vec![
+                Line::from(""),
                 Line::from(" Network 󰛳  "),
                 Line::from(""),
             ]),
             ListItem::new(vec![
                 Line::from(""),
-                Line::from(" Port Forwaring   "),
+                Line::from(" Port Forwarding   "),
                 Line::from(""),
             ]),
             ListItem::new(vec![
@@ -332,6 +351,10 @@ impl Advanced {
                 self.storage.render(frame, area);
             }
 
+            Section::Filesystem => {
+                self.fs.render(frame, area);
+            }
+
             Section::Network => {
                 self.network.render(frame, area);
             }
@@ -358,6 +381,7 @@ impl Advanced {
                 items.extend(self.overview.summary());
                 items.extend(self.hardware.summary());
                 items.extend(self.storage.summary());
+                items.extend(self.fs.summary());
                 items.extend(self.network.summary());
                 items.extend(self.port_fowrwaring.summary());
                 items.extend(self.remote_access.summary());
@@ -406,6 +430,49 @@ impl Advanced {
                         Span::from(" Up"),
                         Span::from(" | "),
                         Span::from("j,↓").bold(),
+                        Span::from(" Down"),
+                        Span::from(" | "),
+                        Span::from("h,←").bold(),
+                        Span::from(" Left"),
+                        Span::from(" | "),
+                        Span::from("l,→").bold(),
+                        Span::from(" Right"),
+                        Span::from(" | "),
+                        Span::from("Esc").bold(),
+                        Span::from(" Cancel"),
+                        Span::from(" | "),
+                        Span::from("Enter").bold(),
+                        Span::from(" Confirm"),
+                    ])]
+                } else {
+                    vec![Line::from(vec![
+                        Span::from("k,↑").bold(),
+                        Span::from(" Up"),
+                        Span::from(" | "),
+                        Span::from("j,↓").bold(),
+                        Span::from(" Down"),
+                        Span::from(" | "),
+                        Span::from("n").bold(),
+                        Span::from(" Add"),
+                        Span::from(" | "),
+                        Span::from("d").bold(),
+                        Span::from(" Delete"),
+                        Span::from(" | "),
+                        Span::from("Esc").bold(),
+                        Span::from(" Cancel"),
+                        Span::from(" | "),
+                        Span::from("⇄").bold(),
+                        Span::from(" Nav"),
+                    ])]
+                }
+            }
+            Section::Filesystem => {
+                if self.fs.new_fs_popup() {
+                    vec![Line::from(vec![
+                        Span::from("↑").bold(),
+                        Span::from(" Up"),
+                        Span::from(" | "),
+                        Span::from("↓").bold(),
                         Span::from(" Down"),
                         Span::from(" | "),
                         Span::from("h,←").bold(),

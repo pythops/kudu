@@ -8,6 +8,7 @@ pub mod cloudinit;
 pub mod confirmation;
 pub mod event;
 pub mod firmware;
+pub mod fs;
 pub mod handlers;
 pub mod help;
 pub mod network;

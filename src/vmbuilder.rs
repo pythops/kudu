@@ -1,5 +1,6 @@
 mod access;
 mod advanced;
+mod fs;
 mod hardware;
 mod overview;
 mod port;
@@ -24,6 +25,7 @@ use crate::{
     access::RemoteAccess,
     confirmation::cancel::CancelConfirmation,
     event::Event::{self},
+    fs::Filesystem,
     network::Network,
     os::Os::{self},
     storage::Disk,
@@ -63,6 +65,7 @@ pub struct VMBuildData {
     pub networks: Vec<Network>,
     pub enable_uefi: bool,
     pub disks: Vec<Disk>,
+    pub fs: Vec<Filesystem>,
     pub remote_access: Option<RemoteAccess>,
 }
 
@@ -99,6 +102,11 @@ impl VMBuilder {
                 advanced
                     .storage
                     .handle_key_events(key_event, advanced.hardware.arch());
+                return Ok(());
+            }
+
+            if advanced.fs.new_fs_popup() {
+                advanced.fs.handle_key_events(key_event);
                 return Ok(());
             }
 

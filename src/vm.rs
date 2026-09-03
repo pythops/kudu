@@ -30,7 +30,9 @@ use crate::{
         DownloadEvent,
         Event::{self, Download, VMStarted},
     },
-    firmware, get_kudu_data_dir, get_kudu_run_dir,
+    firmware,
+    fs::Filesystem,
+    get_kudu_data_dir, get_kudu_run_dir,
     network::{Network, NetworkBackend, bridge::Bridge},
     notification::{self, Notification, NotificationLevel},
     os::Os::{self, TempleOS},
@@ -54,6 +56,7 @@ pub struct VM {
     pub drives: Vec<Drive>,
     pub networks: Vec<Network>,
     pub remote_access: Option<RemoteAccess>,
+    pub fs: Vec<Filesystem>,
 
     #[serde(skip)]
     pub downloading: Arc<AtomicBool>,
@@ -272,6 +275,7 @@ impl VM {
             events_state: ListState::default(),
             vnc: None,
             networks: data.networks,
+            fs: data.fs,
             state: RunState::shutdown,
             remote_access: data.remote_access,
         };
@@ -336,6 +340,8 @@ impl VM {
         self.remote_access = data.remote_access;
 
         self.networks = data.networks;
+
+        self.fs = data.fs;
 
         path.push("vm.json");
         let mut file = File::create(&path)?;
@@ -756,6 +762,46 @@ impl VM {
                             Span::from(disk.format.to_string()),
                             Span::from(" ".repeat(7)),
                             Span::from(disk.interface.to_string()),
+                        ]))
+                    }
+                    lines.push(Line::from(""));
+                    lines
+                }
+            }),
+            ListItem::from({
+                let mut lines = Vec::new();
+
+                if self.fs.is_empty() {
+                    vec![
+                        Line::from(vec![
+                            Span::from("Filesystem").bold().fg(Color::Yellow),
+                            Span::from(" ".repeat(3)),
+                            Span::from(" - "),
+                        ]),
+                        Line::from(""),
+                    ]
+                } else {
+                    lines.push(Line::from(vec![
+                        Span::from("Filesystem").bold().fg(Color::Yellow),
+                        Span::from(" ".repeat(7)),
+                        Span::from("Source Path ").bold(),
+                        Span::from(" ".repeat(10)),
+                        Span::from(" Mount Tag ").bold(),
+                        Span::from(" ".repeat(12)),
+                        Span::from(" Readonly ").bold(),
+                        Span::from(" ".repeat(2)),
+                        Span::from(" Drive ").bold(),
+                    ]));
+                    lines.push(Line::from(""));
+                    for fs in &self.fs {
+                        lines.push(Line::from(vec![
+                            Span::from(" ".repeat(17)),
+                            Span::from(format!("{:23}", fs.source_path.to_string_lossy())),
+                            Span::from(format!("{:15}", fs.mount_tag)),
+                            Span::from(" ".repeat(8)),
+                            Span::from(format!("{:3}", if fs.readonly { "Yes" } else { "No" })),
+                            Span::from(" ".repeat(9)),
+                            Span::from(fs.driver.to_string()),
                         ]))
                     }
                     lines.push(Line::from(""));

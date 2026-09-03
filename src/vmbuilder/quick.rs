@@ -304,6 +304,7 @@ impl Quick {
             enable_uefi: true,
             networks: vec![network::Network::default()],
             disks: Vec::new(),
+            fs: Vec::new(),
             cloudinit: Some(self.cloudinit().unwrap()), //FIX:
             remote_access,
         }

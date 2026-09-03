@@ -218,7 +218,7 @@ impl MappingBuilder {
         frame.render_widget(
             Block::new()
                 .borders(Borders::all())
-                .title(" New Port Forwaring   ")
+                .title(" New Port Forwarding   ")
                 .border_type(BorderType::Thick)
                 .title_alignment(ratatui::layout::HorizontalAlignment::Center)
                 .border_style(Style::default().yellow()),
