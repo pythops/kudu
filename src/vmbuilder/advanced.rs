@@ -7,7 +7,7 @@ use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Style, Stylize},
-    text::{Line, Span, Text},
+    text::{Line, Span},
     widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState},
 };
 
@@ -272,20 +272,18 @@ impl Advanced {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(40),
+                Constraint::Length(27),
                 Constraint::Fill(1),
             ])
-            .margin(1)
             .split(frame.area())[1];
 
         let area = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(140),
+                Constraint::Length(130),
                 Constraint::Fill(1),
             ])
-            .margin(1)
             .split(area)[1];
 
         frame.render_widget(Clear, area);
@@ -311,31 +309,24 @@ impl Advanced {
         );
 
         let area = area.inner(Margin {
-            horizontal: 5,
-            vertical: 2,
+            horizontal: 2,
+            vertical: 1,
         });
 
         let (section_block, area) = {
             let chunks = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([Constraint::Length(20), Constraint::Fill(1)])
-                .flex(ratatui::layout::Flex::SpaceBetween)
+                .constraints([
+                    Constraint::Length(20),
+                    Constraint::Fill(1),
+                    Constraint::Max(100),
+                ])
                 .split(area);
 
-            (chunks[0], chunks[1])
+            (chunks[0], chunks[2])
         };
 
         self.render_header(frame, section_block);
-
-        let area = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Fill(1),
-                Constraint::Length(100),
-                Constraint::Fill(1),
-            ])
-            .flex(ratatui::layout::Flex::Center)
-            .split(area)[1];
 
         match &self.focused_section {
             Section::Overview => {
@@ -368,14 +359,6 @@ impl Advanced {
             }
 
             Section::Summary => {
-                let (summary_block, create_block) = {
-                    let chunks = Layout::default()
-                        .direction(Direction::Vertical)
-                        .constraints([Constraint::Fill(1), Constraint::Length(3)])
-                        .split(area);
-
-                    (chunks[0], chunks[1])
-                };
                 let mut items = Vec::new();
 
                 items.extend(self.overview.summary());
@@ -388,13 +371,8 @@ impl Advanced {
 
                 let list_width = items.iter().map(|item| item.width()).max().unwrap() as u16;
                 let list = List::new(items);
-                let create = Text::from(vec![Line::from(""), Line::from("CREATE"), Line::from("")])
-                    .centered()
-                    .black()
-                    .on_yellow()
-                    .bold();
 
-                let summary_block = Layout::default()
+                let area = Layout::default()
                     .direction(Direction::Horizontal)
                     .constraints([
                         Constraint::Fill(1),
@@ -402,21 +380,15 @@ impl Advanced {
                         Constraint::Fill(1),
                     ])
                     .flex(ratatui::layout::Flex::Center)
-                    .split(summary_block)[1];
+                    .split(area)[1];
 
-                frame.render_widget(list, summary_block);
-
-                let create_block = Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints([
-                        Constraint::Fill(1),
-                        Constraint::Length(20),
-                        Constraint::Fill(1),
-                    ])
-                    .flex(ratatui::layout::Flex::SpaceBetween)
-                    .split(create_block)[1];
-
-                frame.render_widget(create, create_block);
+                frame.render_widget(
+                    list,
+                    area.inner(Margin {
+                        horizontal: 2,
+                        vertical: 1,
+                    }),
+                );
             }
         }
     }

@@ -86,14 +86,7 @@ impl FsBuilder {
             let mut lines = Vec::new();
 
             if self.fs.is_empty() {
-                vec![
-                    Line::from(vec![
-                        Span::from("Filesystem").bold(),
-                        Span::from(" ".repeat(9)),
-                        Span::from(" - "),
-                    ]),
-                    Line::from(""),
-                ]
+                lines
             } else {
                 lines.push(Line::from(vec![
                     Span::from("Filesystem").bold(),

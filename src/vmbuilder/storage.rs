@@ -96,14 +96,7 @@ impl Storage {
         vec![ListItem::from({
             let mut lines = Vec::new();
             if self.disks.is_empty() {
-                vec![
-                    Line::from(vec![
-                        Span::from("Additional Disks ").bold(),
-                        Span::from(" ".repeat(2)),
-                        Span::from(" - "),
-                    ]),
-                    Line::from(""),
-                ]
+                Vec::new()
             } else {
                 lines.push(Line::from(vec![
                     Span::from("Disks  ").bold(),

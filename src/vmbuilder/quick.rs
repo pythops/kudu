@@ -366,7 +366,7 @@ impl Quick {
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(130),
+                Constraint::Length(85),
                 Constraint::Fill(1),
             ])
             .split(area)[1];
@@ -388,7 +388,7 @@ impl Quick {
         );
 
         let area = area.inner(Margin {
-            horizontal: 5,
+            horizontal: 3,
             vertical: 3,
         });
 
@@ -396,7 +396,7 @@ impl Quick {
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(80),
+                Constraint::Length(90),
                 Constraint::Fill(1),
             ])
             .flex(ratatui::layout::Flex::Center)

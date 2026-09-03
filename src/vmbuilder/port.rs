@@ -129,14 +129,7 @@ impl PortForwarding {
         vec![ListItem::from({
             let mut lines = Vec::new();
             if self.mappings.is_empty() {
-                vec![
-                    Line::from(vec![
-                        Span::from("Port Forwarding ").bold(),
-                        Span::from(" ".repeat(3)),
-                        Span::from(" - "),
-                    ]),
-                    Line::from(""),
-                ]
+                lines
             } else {
                 lines.push(Line::from(vec![
                     Span::from("Port Forwarding ").bold(),
