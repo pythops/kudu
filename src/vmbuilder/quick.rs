@@ -32,7 +32,6 @@ pub enum Section {
     Memory,
     Username,
     Password,
-    Create,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -139,15 +138,12 @@ impl Quick {
                     self.section = Section::Password;
                 }
                 Section::Password => {
-                    self.section = Section::Create;
-                }
-                Section::Create => {
                     self.section = Section::Name;
                 }
             },
             KeyCode::BackTab | KeyCode::Up => match self.section {
                 Section::Name => {
-                    self.section = Section::Create;
+                    self.section = Section::Password;
                 }
                 Section::Os => {
                     self.section = Section::Name;
@@ -167,10 +163,13 @@ impl Quick {
                 Section::Password => {
                     self.section = Section::Username;
                 }
-                Section::Create => {
-                    self.section = Section::Password;
-                }
             },
+            KeyCode::Enter => {
+                if self.validate() {
+                    let vm_build_data = self.build();
+                    let _ = sender.send(Event::VMCreated(vm_build_data));
+                }
+            }
             _ => match &self.section {
                 Section::Name => {
                     self.name
@@ -277,12 +276,6 @@ impl Quick {
                         .field
                         .handle_event(&crossterm::event::Event::Key(key_event));
                 }
-                Section::Create => {
-                    if KeyCode::Enter == key_event.code && self.validate() {
-                        let vm_build_data = self.build();
-                        let _ = sender.send(Event::VMCreated(vm_build_data));
-                    }
-                }
             },
         }
     }
@@ -364,10 +357,9 @@ impl Quick {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(42),
+                Constraint::Length(27),
                 Constraint::Fill(1),
             ])
-            .margin(1)
             .split(frame.area())[1];
 
         let area = Layout::default()
@@ -377,7 +369,6 @@ impl Quick {
                 Constraint::Length(130),
                 Constraint::Fill(1),
             ])
-            .margin(1)
             .split(area)[1];
 
         frame.render_widget(Clear, area);
@@ -398,7 +389,7 @@ impl Quick {
 
         let area = area.inner(Margin {
             horizontal: 5,
-            vertical: 2,
+            vertical: 3,
         });
 
         let area = Layout::default()
@@ -419,26 +410,22 @@ impl Quick {
             memory_block,
             username_block,
             password_block,
-            create_block,
         ) = {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(4),
-                    Constraint::Length(4),
-                    Constraint::Length(4),
-                    Constraint::Length(4),
-                    Constraint::Length(4),
-                    Constraint::Length(4),
-                    Constraint::Length(4),
+                    Constraint::Length(3),
+                    Constraint::Length(3),
+                    Constraint::Length(3),
+                    Constraint::Length(3),
+                    Constraint::Length(3),
+                    Constraint::Length(3),
                     Constraint::Length(3),
                 ])
-                .margin(2)
                 .split(area);
 
             (
                 chunks[0], chunks[1], chunks[2], chunks[3], chunks[4], chunks[5], chunks[6],
-                chunks[7],
             )
         };
 
@@ -642,26 +629,6 @@ impl Quick {
             ]),
         ];
 
-        let create_block = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Fill(1),
-                Constraint::Length(12),
-                Constraint::Fill(1),
-            ])
-            .flex(ratatui::layout::Flex::SpaceBetween)
-            .split(create_block)[1];
-
-        let create = Text::from(vec![Line::from(""), Line::from("CREATE"), Line::from("")])
-            .centered()
-            .style({
-                if self.section == Section::Create {
-                    Style::default().black().on_yellow()
-                } else {
-                    Style::new()
-                }
-            });
-
         frame.render_widget(Text::from(name), name_block);
         frame.render_widget(os, os_block);
         frame.render_widget(release, release_block);
@@ -669,34 +636,33 @@ impl Quick {
         frame.render_widget(Text::from(memory), memory_block);
         frame.render_widget(Text::from(username), username_block);
         frame.render_widget(Text::from(password), password_block);
-        frame.render_widget(create, create_block);
 
         // FIX: cursor shows on the confirmation popup
         if !cancel_popup {
             match self.section {
                 Section::Name if self.name.field.visual_cursor() < 65 => {
-                    let x = area.x + self.name.field.visual_cursor() as u16 + 16;
-                    let y = area.y + 2;
+                    let x = area.x + self.name.field.visual_cursor() as u16 + 14;
+                    let y = area.y;
                     frame.set_cursor_position((x, y));
                 }
                 Section::Cpu if self.vcpu.field.visual_cursor() < 50 => {
-                    let x = area.x + self.vcpu.field.visual_cursor() as u16 + 16;
-                    let y = area.y + 14;
+                    let x = area.x + self.vcpu.field.visual_cursor() as u16 + 14;
+                    let y = area.y + 9;
                     frame.set_cursor_position((x, y));
                 }
                 Section::Memory if self.memory.field.visual_cursor() < 50 => {
-                    let x = area.x + self.memory.field.visual_cursor() as u16 + 16;
-                    let y = area.y + 18;
+                    let x = area.x + self.memory.field.visual_cursor() as u16 + 14;
+                    let y = area.y + 12;
                     frame.set_cursor_position((x, y));
                 }
                 Section::Username if self.username.field.visual_cursor() < 50 => {
-                    let x = area.x + self.username.field.visual_cursor() as u16 + 16;
-                    let y = area.y + 22;
+                    let x = area.x + self.username.field.visual_cursor() as u16 + 14;
+                    let y = area.y + 15;
                     frame.set_cursor_position((x, y));
                 }
                 Section::Password if self.password.field.visual_cursor() < 50 => {
-                    let x = area.x + self.password.field.visual_cursor() as u16 + 16;
-                    let y = area.y + 26;
+                    let x = area.x + self.password.field.visual_cursor() as u16 + 14;
+                    let y = area.y + 18;
                     frame.set_cursor_position((x, y));
                 }
                 _ => {}
@@ -725,7 +691,7 @@ impl Quick {
             Span::from(" Cancel"),
             Span::from(" | "),
             Span::from("Enter").bold(),
-            Span::from(" Confirm"),
+            Span::from(" Create"),
         ])]
     }
 }
