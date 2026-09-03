@@ -645,35 +645,16 @@ impl EditVM {
                     }
                 }
             }
-            Section::Storage if self.storage.new_drive_popup() => self.storage.help(),
-            _ => {
-                if self.new_popup() {
-                    vec![Line::from(vec![
-                        Span::from("k,↑").bold(),
-                        Span::from("  Up"),
-                        Span::from(" | "),
-                        Span::from("j,↓").bold(),
-                        Span::from("  Down"),
-                        Span::from(" | "),
-                        Span::from("h,←").bold(),
-                        Span::from("  Left"),
-                        Span::from(" | "),
-                        Span::from("l,→").bold(),
-                        Span::from("  Right"),
-                        Span::from(" | "),
-                        Span::from("Esc").bold(),
-                        Span::from(" Cancel"),
-                        Span::from(" | "),
-                        Span::from("Enter").bold(),
-                        Span::from(" Confirm"),
-                    ])]
+            Section::Storage => {
+                if self.storage.new_drive_popup() {
+                    self.storage.help()
                 } else {
                     if block_width >= 113 {
                         vec![Line::from(vec![
-                            Span::from("↑").bold(),
+                            Span::from("k,↑").bold(),
                             Span::from("  Up"),
                             Span::from(" | "),
-                            Span::from("↓").bold(),
+                            Span::from("j,↓").bold(),
                             Span::from("  Down"),
                             Span::from(" | "),
                             Span::from("h,←").bold(),
@@ -706,10 +687,10 @@ impl EditVM {
                     } else {
                         vec![
                             Line::from(vec![
-                                Span::from("↑").bold(),
+                                Span::from("k,↑").bold(),
                                 Span::from("  Up"),
                                 Span::from(" | "),
-                                Span::from("↓").bold(),
+                                Span::from("j,↓").bold(),
                                 Span::from("  Down"),
                                 Span::from(" | "),
                                 Span::from("h,←").bold(),
@@ -743,6 +724,122 @@ impl EditVM {
                         ]
                     }
                 }
+            }
+            Section::Network | Section::PortForwarding => {
+                if self.new_popup() {
+                    vec![Line::from(vec![
+                        Span::from("k,↑").bold(),
+                        Span::from("  Up"),
+                        Span::from(" | "),
+                        Span::from("j,↓").bold(),
+                        Span::from("  Down"),
+                        Span::from(" | "),
+                        Span::from("h,←").bold(),
+                        Span::from("  Left"),
+                        Span::from(" | "),
+                        Span::from("l,→").bold(),
+                        Span::from("  Right"),
+                        Span::from(" | "),
+                        Span::from("Esc").bold(),
+                        Span::from(" Cancel"),
+                        Span::from(" | "),
+                        Span::from("Enter").bold(),
+                        Span::from(" Confirm"),
+                    ])]
+                } else {
+                    if block_width >= 113 {
+                        vec![Line::from(vec![
+                            Span::from("k,↑").bold(),
+                            Span::from("  Up"),
+                            Span::from(" | "),
+                            Span::from("j,↓").bold(),
+                            Span::from("  Down"),
+                            Span::from(" | "),
+                            Span::from("h,←").bold(),
+                            Span::from("  Left"),
+                            Span::from(" | "),
+                            Span::from("l,→").bold(),
+                            Span::from("  Right"),
+                            Span::from(" | "),
+                            Span::from("n").bold(),
+                            Span::from("  Add"),
+                            Span::from(" | "),
+                            Span::from("d").bold(),
+                            Span::from("  Delete"),
+                            Span::from(" | "),
+                            Span::from("u").bold(),
+                            Span::from("  Undo"),
+                            Span::from(" | "),
+                            Span::from("Esc").bold(),
+                            Span::from(" Cancel"),
+                            Span::from(" | "),
+                            Span::from("Enter").bold(),
+                            Span::from(" Confirm"),
+                            Span::from(" | "),
+                            Span::from("⇄").bold(),
+                            Span::from(" Nav"),
+                        ])]
+                    } else {
+                        vec![
+                            Line::from(vec![
+                                Span::from("k,↑").bold(),
+                                Span::from("  Up"),
+                                Span::from(" | "),
+                                Span::from("j,↓").bold(),
+                                Span::from("  Down"),
+                                Span::from(" | "),
+                                Span::from("h,←").bold(),
+                                Span::from("  Left"),
+                                Span::from(" | "),
+                                Span::from("l,→").bold(),
+                                Span::from("  Right"),
+                            ]),
+                            Line::from(vec![
+                                Span::from("n").bold(),
+                                Span::from("  Add"),
+                                Span::from(" | "),
+                                Span::from("d").bold(),
+                                Span::from("  Delete"),
+                                Span::from(" | "),
+                                Span::from("u").bold(),
+                                Span::from("  Undo"),
+                                Span::from(" | "),
+                                Span::from("Esc").bold(),
+                                Span::from(" Cancel"),
+                                Span::from(" | "),
+                                Span::from("Enter").bold(),
+                                Span::from(" Confirm"),
+                                Span::from(" | "),
+                                Span::from("⇄").bold(),
+                                Span::from(" Nav"),
+                            ]),
+                        ]
+                    }
+                }
+            }
+            Section::RemoteAccess => {
+                vec![Line::from(vec![
+                    Span::from("k,↑").bold(),
+                    Span::from("  Up"),
+                    Span::from(" | "),
+                    Span::from("j,↓").bold(),
+                    Span::from("  Down"),
+                    Span::from(" | "),
+                    Span::from("h,←").bold(),
+                    Span::from("  Left"),
+                    Span::from(" | "),
+                    Span::from("l,→").bold(),
+                    Span::from("  Right"),
+                    Span::from(" | "),
+                    Span::from("Esc").bold(),
+                    Span::from(" Cancel"),
+                    Span::from(" | "),
+                    Span::from("Enter").bold(),
+                    Span::from(" Confirm"),
+                    Span::from(" | "),
+                    Span::from("⇄").bold(),
+                    Span::from(" Nav"),
+                ])]
             }
         }
     }

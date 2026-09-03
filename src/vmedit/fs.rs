@@ -1,9 +1,9 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,
-    layout::{Constraint, Rect},
+    layout::{Constraint, Direction, Flex, Layout, Rect},
     style::{Style, Stylize},
-    text::{Line, Span},
+    text::{Line, Span, Text},
     widgets::{Row, Table, TableState},
 };
 
@@ -119,75 +119,89 @@ impl FsEdit {
     }
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
-        let widths = [
-            Constraint::Length(6),
-            Constraint::Length(20),
-            Constraint::Length(20),
-            Constraint::Length(8),
-            Constraint::Length(10),
-        ];
+        if self.fs.is_empty() && self.added_fs.is_empty() {
+            let area = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Fill(1),
+                    Constraint::Length(1),
+                    Constraint::Fill(1),
+                ])
+                .flex(Flex::Center)
+                .split(area)[1];
+            let message = Text::from("Press n to add a new shared fs").centered();
+            frame.render_widget(message, area);
+        } else {
+            let widths = [
+                Constraint::Length(6),
+                Constraint::Length(20),
+                Constraint::Length(20),
+                Constraint::Length(8),
+                Constraint::Length(10),
+            ];
 
-        let vm_fs = self.fs.iter().map(|fs| {
-            let to_delete = self.deleted_fs.contains(fs);
-            Row::new(vec![
-                Line::from({
-                    if to_delete {
-                        "Delete".to_string()
-                    } else {
-                        String::new()
-                    }
-                }),
-                Line::from(fs.source_path.to_string_lossy().to_string()),
-                Line::from(fs.mount_tag.clone()),
-                Line::from({
-                    if fs.readonly {
-                        "Yes".to_string()
-                    } else {
-                        "No".to_string()
-                    }
-                }),
-                Line::from(fs.driver.to_string()),
-            ])
-            .style(if to_delete {
-                Style::new().red()
-            } else {
-                Style::default()
-            })
-        });
+            let vm_fs = self.fs.iter().map(|fs| {
+                let to_delete = self.deleted_fs.contains(fs);
+                Row::new(vec![
+                    Line::from({
+                        if to_delete {
+                            "Delete".to_string()
+                        } else {
+                            String::new()
+                        }
+                    }),
+                    Line::from(fs.source_path.to_string_lossy().to_string()),
+                    Line::from(fs.mount_tag.clone()),
+                    Line::from({
+                        if fs.readonly {
+                            "Yes".to_string()
+                        } else {
+                            "No".to_string()
+                        }
+                    }),
+                    Line::from(fs.driver.to_string()),
+                ])
+                .style(if to_delete {
+                    Style::new().red()
+                } else {
+                    Style::default()
+                })
+            });
 
-        let added_fs = self.added_fs.iter().map(|fs| {
-            Row::new(vec![
-                Line::from("New"),
-                Line::from(fs.source_path.to_string_lossy().to_string()),
-                Line::from(fs.mount_tag.clone()),
-                Line::from({
-                    if fs.readonly {
-                        "Yes".to_string()
-                    } else {
-                        "No".to_string()
-                    }
-                }),
-                Line::from(fs.driver.to_string()),
-            ])
-            .green()
-        });
+            let added_fs = self.added_fs.iter().map(|fs| {
+                Row::new(vec![
+                    Line::from("New"),
+                    Line::from(fs.source_path.to_string_lossy().to_string()),
+                    Line::from(fs.mount_tag.clone()),
+                    Line::from({
+                        if fs.readonly {
+                            "Yes".to_string()
+                        } else {
+                            "No".to_string()
+                        }
+                    }),
+                    Line::from(fs.driver.to_string()),
+                ])
+                .green()
+            });
 
-        let mut fs = Vec::new();
+            let mut fs = Vec::new();
 
-        fs.extend(vm_fs);
-        fs.extend(added_fs);
+            fs.extend(vm_fs);
+            fs.extend(added_fs);
 
-        let fs = Table::new(fs, widths)
-            .header(
-                Row::new(vec!["", "Source Path", "Mount Tag", "Readonly", "Driver"])
-                    .style(Style::new().bold())
-                    .bottom_margin(1),
-            )
-            .flex(ratatui::layout::Flex::SpaceAround)
-            .row_highlight_style(Style::new().on_dark_gray())
-            .column_spacing(1);
+            let fs = Table::new(fs, widths)
+                .header(
+                    Row::new(vec!["", "Source Path", "Mount Tag", "Readonly", "Driver"])
+                        .style(Style::new().bold())
+                        .bottom_margin(1),
+                )
+                .flex(ratatui::layout::Flex::SpaceAround)
+                .row_highlight_style(Style::new().on_dark_gray())
+                .column_spacing(1);
 
-        frame.render_stateful_widget(fs, area, &mut self.fs_state);
+            frame.render_stateful_widget(fs, area, &mut self.fs_state);
+        }
 
         if let Some(new_fs) = &self.new_fs {
             new_fs.render(frame);

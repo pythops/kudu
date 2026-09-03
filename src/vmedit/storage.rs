@@ -4,6 +4,7 @@ use anyhow::Result;
 use anyhow::anyhow;
 use crossterm::event::{KeyCode, KeyEvent};
 
+use ratatui::layout::Flex;
 use ratatui::text::Line;
 use ratatui::text::Text;
 use ratatui::{
@@ -231,104 +232,118 @@ impl StorageEdit {
     }
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
-        let widths = [
-            Constraint::Length(6),
-            Constraint::Length(10),
-            Constraint::Length(10),
-            Constraint::Length(16),
-            Constraint::Length(10),
-            Constraint::Length(15),
-        ];
-
-        let vm_drives = self.drives.iter().map(|drive| {
-            let to_delete = self.deleted_drive_paths.contains(&drive.path);
-            let resized = self.resized_drives.contains_key(&drive.path);
-            Row::new(vec![
-                Line::from({
-                    if to_delete {
-                        "Delete".to_string()
-                    } else if resized {
-                        "Resize".to_string()
-                    } else {
-                        String::new()
-                    }
-                }),
-                Line::from({
-                    match drive.media {
-                        Media::Disk => "Disk    ".to_string(),
-                        Media::CdRom => "Cdrom   ".to_string(),
-                    }
-                }),
-                Line::from(drive.format.to_string()),
-                Line::from({
-                    if let Some(size) = drive.size {
-                        if resized {
-                            let new_size = self.resized_drives.get(&drive.path).unwrap();
-                            let new_size = Self::new_size_to_u16(size, new_size).unwrap();
-                            let new_size = Drive::format_size(new_size);
-                            let size = Drive::format_size(size);
-                            format!("{size} -> {new_size}")
-                        } else {
-                            Drive::format_size(size)
-                        }
-                    } else {
-                        "-".to_string()
-                    }
-                })
-                .centered(),
-                Line::from(drive.interface.to_string()),
-                Line::from(
-                    drive
-                        .path
-                        .file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .to_string(),
-                ),
-            ])
-            .style(if to_delete {
-                Style::new().red()
-            } else if resized {
-                Style::new().yellow()
-            } else {
-                Style::default()
-            })
-        });
-
-        let new_drives = self.added_disks.iter().map(|drive| {
-            Row::new(vec![
-                "New".to_string(),
-                "Disk    ".to_string(),
-                drive.format.to_string(),
-                format!("{} GiB", drive.size),
-                drive.interface.to_string(),
-                "-".to_string(),
-            ])
-            .green()
-        });
-
-        let mut drives: Vec<Row> = Vec::new();
-        drives.extend(vm_drives);
-        drives.extend(new_drives);
-
-        let disks = Table::new(drives, widths)
-            .header(
-                Row::new(vec![
-                    Line::from(""),
-                    Line::from("Type"),
-                    Line::from("Format"),
-                    Line::from("Size").centered(),
-                    Line::from("Interface"),
-                    Line::from("File Name"),
+        if self.drives.is_empty() && self.added_disks.is_empty() {
+            let area = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Fill(1),
+                    Constraint::Length(1),
+                    Constraint::Fill(1),
                 ])
-                .style(Style::new().bold())
-                .bottom_margin(1),
-            )
-            .flex(ratatui::layout::Flex::SpaceBetween)
-            .row_highlight_style(Style::new().on_dark_gray())
-            .column_spacing(1);
+                .flex(Flex::Center)
+                .split(area)[1];
+            let message = Text::from("Press n to add a new drive").centered();
+            frame.render_widget(message, area);
+        } else {
+            let widths = [
+                Constraint::Length(6),
+                Constraint::Length(10),
+                Constraint::Length(10),
+                Constraint::Length(16),
+                Constraint::Length(10),
+                Constraint::Length(15),
+            ];
 
-        frame.render_stateful_widget(disks, area, &mut self.drive_state);
+            let vm_drives = self.drives.iter().map(|drive| {
+                let to_delete = self.deleted_drive_paths.contains(&drive.path);
+                let resized = self.resized_drives.contains_key(&drive.path);
+                Row::new(vec![
+                    Line::from({
+                        if to_delete {
+                            "Delete".to_string()
+                        } else if resized {
+                            "Resize".to_string()
+                        } else {
+                            String::new()
+                        }
+                    }),
+                    Line::from({
+                        match drive.media {
+                            Media::Disk => "Disk    ".to_string(),
+                            Media::CdRom => "Cdrom   ".to_string(),
+                        }
+                    }),
+                    Line::from(drive.format.to_string()),
+                    Line::from({
+                        if let Some(size) = drive.size {
+                            if resized {
+                                let new_size = self.resized_drives.get(&drive.path).unwrap();
+                                let new_size = Self::new_size_to_u16(size, new_size).unwrap();
+                                let new_size = Drive::format_size(new_size);
+                                let size = Drive::format_size(size);
+                                format!("{size} -> {new_size}")
+                            } else {
+                                Drive::format_size(size)
+                            }
+                        } else {
+                            "-".to_string()
+                        }
+                    })
+                    .centered(),
+                    Line::from(drive.interface.to_string()),
+                    Line::from(
+                        drive
+                            .path
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .to_string(),
+                    ),
+                ])
+                .style(if to_delete {
+                    Style::new().red()
+                } else if resized {
+                    Style::new().yellow()
+                } else {
+                    Style::default()
+                })
+            });
+
+            let new_drives = self.added_disks.iter().map(|drive| {
+                Row::new(vec![
+                    "New".to_string(),
+                    "Disk    ".to_string(),
+                    drive.format.to_string(),
+                    format!("{} GiB", drive.size),
+                    drive.interface.to_string(),
+                    "-".to_string(),
+                ])
+                .green()
+            });
+
+            let mut drives: Vec<Row> = Vec::new();
+            drives.extend(vm_drives);
+            drives.extend(new_drives);
+
+            let disks = Table::new(drives, widths)
+                .header(
+                    Row::new(vec![
+                        Line::from(""),
+                        Line::from("Type"),
+                        Line::from("Format"),
+                        Line::from("Size").centered(),
+                        Line::from("Interface"),
+                        Line::from("File Name"),
+                    ])
+                    .style(Style::new().bold())
+                    .bottom_margin(1),
+                )
+                .flex(ratatui::layout::Flex::SpaceBetween)
+                .row_highlight_style(Style::new().on_dark_gray())
+                .column_spacing(1);
+
+            frame.render_stateful_widget(disks, area, &mut self.drive_state);
+        }
 
         if let Some(new_drive) = &self.new_drive {
             new_drive.render(frame);
