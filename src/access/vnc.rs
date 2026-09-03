@@ -112,45 +112,54 @@ impl VncBuilder {
     }
 
     pub fn handle_key_events(&mut self, key_event: KeyEvent) {
-        match self.section {
-            Section::Enable => match key_event.code {
-                KeyCode::Down | KeyCode::Char('j') => {
-                    self.section = Section::Host;
-                }
-                KeyCode::Up | KeyCode::Char('k') => {
-                    self.section = Section::Password;
-                }
+        if !self.enabled {
+            match key_event.code {
                 KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') => {
                     self.enabled = !self.enabled;
                 }
                 _ => {}
-            },
-            Section::Host => match key_event.code {
-                KeyCode::Down => {
-                    self.section = Section::Password;
-                }
-                KeyCode::Up => {
-                    self.section = Section::Enable;
-                }
-                _ => {
-                    self.host
-                        .field
-                        .handle_event(&crossterm::event::Event::Key(key_event));
-                }
-            },
-            Section::Password => match key_event.code {
-                KeyCode::Down => {
-                    self.section = Section::Enable;
-                }
-                KeyCode::Up => {
-                    self.section = Section::Host;
-                }
-                _ => {
-                    self.password
-                        .field
-                        .handle_event(&crossterm::event::Event::Key(key_event));
-                }
-            },
+            }
+        } else {
+            match self.section {
+                Section::Enable => match key_event.code {
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        self.section = Section::Host;
+                    }
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        self.section = Section::Password;
+                    }
+                    KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') => {
+                        self.enabled = !self.enabled;
+                    }
+                    _ => {}
+                },
+                Section::Host => match key_event.code {
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        self.section = Section::Password;
+                    }
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        self.section = Section::Enable;
+                    }
+                    _ => {
+                        self.host
+                            .field
+                            .handle_event(&crossterm::event::Event::Key(key_event));
+                    }
+                },
+                Section::Password => match key_event.code {
+                    KeyCode::Down => {
+                        self.section = Section::Enable;
+                    }
+                    KeyCode::Up => {
+                        self.section = Section::Host;
+                    }
+                    _ => {
+                        self.password
+                            .field
+                            .handle_event(&crossterm::event::Event::Key(key_event));
+                    }
+                },
+            }
         }
     }
 
