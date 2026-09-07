@@ -31,6 +31,14 @@
 
 You can download the pre-built binaries from the release page [release page](https://github.com/pythops/kudu/releases)
 
+### X-CMD
+
+Maybe using [x-cmd](https://www.x-cmd.com/mod/eget):
+
+```bash
+x eget use pythops/kudu
+```
+
 ### Build from source
 
 ```shell
