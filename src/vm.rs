@@ -33,6 +33,7 @@ use crate::{
     firmware,
     fs::Filesystem,
     get_kudu_data_dir, get_kudu_run_dir,
+    graphics::Graphics,
     network::{Network, NetworkBackend, bridge::Bridge},
     notification::{self, Notification, NotificationLevel},
     os::Os::{self, TempleOS},
@@ -57,6 +58,7 @@ pub struct VM {
     pub networks: Vec<Network>,
     pub remote_access: Option<RemoteAccess>,
     pub fs: Vec<Filesystem>,
+    pub graphics: Graphics,
 
     #[serde(skip)]
     pub downloading: Arc<AtomicBool>,
@@ -278,6 +280,7 @@ impl VM {
             fs: data.fs,
             state: RunState::shutdown,
             remote_access: data.remote_access,
+            graphics: data.graphics,
         };
 
         let data = serde_json::to_string_pretty(&vm)?;
