@@ -95,26 +95,26 @@ impl VM {
                 if path.ends_with("vm.json") {
                     let buf = fs::read_to_string(path)?;
 
-                    let mut vm: VM = serde_json::from_str(&buf)?;
+                    if let Ok(mut vm) = serde_json::from_str::<VM>(&buf) {
+                        if let Ok(state) = Qemu::status(vm.id) {
+                            vm.state = state;
 
-                    if let Ok(state) = Qemu::status(vm.id) {
-                        vm.state = state;
+                            if let Ok(vnc_info) = Qemu::vnc_infos(vm.id) {
+                                vm.vnc = Some(vnc_info);
+                            }
 
-                        if let Ok(vnc_info) = Qemu::vnc_infos(vm.id) {
-                            vm.vnc = Some(vnc_info);
+                            let vm_events_path = VM::get_events_file(vm.id);
+                            Qemu::events(vm_events_path, vm.id, sender.clone());
+                        } else {
+                            for drive in &mut vm.drives {
+                                drive.size = Drive::size(&drive.path).ok();
+                            }
                         }
 
-                        let vm_events_path = VM::get_events_file(vm.id);
-                        Qemu::events(vm_events_path, vm.id, sender.clone());
-                    } else {
-                        for drive in &mut vm.drives {
-                            drive.size = Drive::size(&drive.path).ok();
-                        }
+                        vm.load_events_from_file()?;
+
+                        vms.push(vm);
                     }
-
-                    vm.load_events_from_file()?;
-
-                    vms.push(vm);
                 }
             }
         }

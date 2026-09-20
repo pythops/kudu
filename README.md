@@ -4,6 +4,9 @@
 
 ![](https://github.com/user-attachments/assets/2331028e-741c-4689-9777-fb74fd72b345)
 
+> [!WARNING]
+> kudu is under active development. breaking changes are expected.
+
 ## Description
 
 `kudu` is a TUI for creating and managing VMs on Linux. It is an alternative to GUIs like `virt-manager` or `GNOME boxes` and as opposed to these, it does not rely on libvirt
