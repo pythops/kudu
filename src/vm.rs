@@ -918,6 +918,17 @@ impl VM {
                 ]),
                 Line::from(""),
             ]),
+            ListItem::from(vec![
+                Line::from(vec![
+                    Span::from("Graphics").bold().fg(Color::Yellow),
+                    Span::from(" ".repeat(9)),
+                    Span::from(format!(
+                        "Card: {} -- Display: {}",
+                        self.graphics.device, self.graphics.display,
+                    )),
+                ]),
+                Line::from(""),
+            ]),
         ]);
 
         if let Some(vnc_info) = self.vnc.clone()

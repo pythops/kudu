@@ -271,13 +271,10 @@ impl GraphicsBuilder {
             Line::from(vec![
                 Span::from("Graphics").bold(),
                 Span::from(" ".repeat(12)),
-                Span::from(self.device.to_string()),
-            ]),
-            Line::from(""),
-            Line::from(vec![
-                Span::from("Display").bold(),
-                Span::from(" ".repeat(13)),
-                Span::from(self.display.to_string()),
+                Span::from(format!(
+                    "Card: {} -- Display: {}",
+                    self.device, self.display,
+                )),
             ]),
             Line::from(""),
         ])]
