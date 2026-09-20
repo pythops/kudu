@@ -26,14 +26,7 @@ impl Qemu {
         let vm_events_path = VM::get_events_file(vm.id);
 
         let mut command = match vm.arch {
-            Arch::X86_64 => {
-                let mut command = Command::new("qemu-system-x86_64");
-                command
-                    .arg("-device")
-                    .arg("VGA,edid=on,xres=1920,yres=1080");
-
-                command
-            }
+            Arch::X86_64 => Command::new("qemu-system-x86_64"),
             Arch::Aarch64 => {
                 let mut command = Command::new("qemu-system-aarch64");
                 command
@@ -41,8 +34,6 @@ impl Qemu {
                     .arg("virt")
                     .arg("-cpu")
                     .arg("max")
-                    .arg("-device")
-                    .arg("virtio-gpu-pci")
                     .arg("-device")
                     .arg("qemu-xhci")
                     .arg("-device")
@@ -57,8 +48,6 @@ impl Qemu {
                     .arg("virt")
                     .arg("-cpu")
                     .arg("max")
-                    .arg("-device")
-                    .arg("virtio-gpu-pci")
                     .arg("-device")
                     .arg("qemu-xhci")
                     .arg("-device")
@@ -92,6 +81,8 @@ impl Qemu {
         for fs in &vm.fs {
             command.args(fs.to_qemu_arg());
         }
+
+        command.args(vm.graphics.to_qemu_arg());
 
         command
             .arg("-daemonize")

@@ -8,6 +8,7 @@ use crate::{
     access::{RemoteAccess, vnc::VNC},
     cloudinit::Cloudinit,
     event::Event,
+    graphics::Graphics,
     network,
     os::{Os, debian::DebianRelease, ubuntu::UbuntuRelease},
     vmbuilder::VMBuildData,
@@ -300,6 +301,7 @@ impl Quick {
             fs: Vec::new(),
             cloudinit: Some(self.cloudinit().unwrap()), //FIX:
             remote_access,
+            graphics: Graphics::default(),
         }
     }
 

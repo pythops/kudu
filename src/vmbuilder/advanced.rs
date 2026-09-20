@@ -16,7 +16,7 @@ use crate::{
     event::Event,
     network,
     os::Os::{ArchLinux, TempleOS},
-    vmbuilder::{VMBuildData, access, fs, hardware, overview, port, storage},
+    vmbuilder::{VMBuildData, access, fs, graphics, hardware, overview, port, storage},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -28,6 +28,7 @@ pub enum Section {
     Network,
     PortForwarding,
     RemoteAccess,
+    Graphics,
     Summary,
 }
 
@@ -42,6 +43,7 @@ pub struct Advanced {
     pub network: network::builder::NetworkBuilder,
     pub port_fowrwaring: port::PortForwarding,
     pub remote_access: access::RemoteAccessBuilder,
+    pub graphics: graphics::GraphicsBuilder,
 }
 
 impl Default for Advanced {
@@ -65,6 +67,7 @@ impl Advanced {
             network,
             port_fowrwaring,
             remote_access: access::RemoteAccessBuilder::new(),
+            graphics: graphics::GraphicsBuilder::new(),
         }
     }
 
@@ -83,6 +86,7 @@ impl Advanced {
             disks: self.storage.disks(),
             fs: self.fs.filesystems(),
             remote_access: self.remote_access.access(),
+            graphics: self.graphics.build(),
         }
     }
 
@@ -96,6 +100,10 @@ impl Advanced {
 
     fn validate_remote_access(&mut self) -> bool {
         self.remote_access.validate()
+    }
+
+    fn validate_graphics_section(&mut self) -> bool {
+        self.graphics.validate()
     }
 
     pub fn handle_key_events(&mut self, key_event: KeyEvent, sender: Sender<Event>) -> Result<()> {
@@ -137,9 +145,15 @@ impl Advanced {
                     self.focused_section = Section::PortForwarding
                 }
                 Section::PortForwarding => self.focused_section = Section::RemoteAccess,
+
                 Section::RemoteAccess => {
                     if self.validate_remote_access() {
-                        self.focused_section = Section::Summary
+                        self.focused_section = Section::Graphics;
+                    }
+                }
+                Section::Graphics => {
+                    if self.validate_graphics_section() {
+                        self.focused_section = Section::Summary;
                     }
                 }
                 Section::Summary => {
@@ -178,7 +192,12 @@ impl Advanced {
                         self.focused_section = Section::PortForwarding
                     }
                 }
-                Section::Summary => self.focused_section = Section::RemoteAccess,
+                Section::Graphics => {
+                    if self.validate_graphics_section() {
+                        self.focused_section = Section::RemoteAccess;
+                    }
+                }
+                Section::Summary => self.focused_section = Section::Graphics,
             },
             _ => match &self.focused_section {
                 Section::Overview => {
@@ -207,6 +226,9 @@ impl Advanced {
                 }
                 Section::RemoteAccess => {
                     self.remote_access.handle_key_events(key_event);
+                }
+                Section::Graphics => {
+                    self.graphics.handle_key_events(key_event);
                 }
                 Section::Summary => {}
             },
@@ -256,6 +278,11 @@ impl Advanced {
             ]),
             ListItem::new(vec![
                 Line::from(""),
+                Line::from(" Graphics 󰢮  "),
+                Line::from(""),
+            ]),
+            ListItem::new(vec![
+                Line::from(""),
                 Line::from(" Summary  󱇗  "),
                 Line::from(""),
             ]),
@@ -272,7 +299,7 @@ impl Advanced {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(27),
+                Constraint::Length(30),
                 Constraint::Fill(1),
             ])
             .split(frame.area())[1];
@@ -358,6 +385,10 @@ impl Advanced {
                 self.remote_access.render(frame, area, cancel_popup);
             }
 
+            Section::Graphics => {
+                self.graphics.render(frame, area);
+            }
+
             Section::Summary => {
                 let mut items = Vec::new();
 
@@ -368,6 +399,7 @@ impl Advanced {
                 items.extend(self.network.summary());
                 items.extend(self.port_fowrwaring.summary());
                 items.extend(self.remote_access.summary());
+                items.extend(self.graphics.summary());
 
                 let list_width = items.iter().map(|item| item.width()).max().unwrap() as u16;
                 let list = List::new(items);
@@ -523,6 +555,9 @@ impl Advanced {
                         Span::from(" Nav"),
                     ])]
                 }
+            }
+            Section::Graphics => {
+                vec![Line::from(vec![Span::from("⇄").bold(), Span::from(" Nav")])]
             }
             Section::Summary => {
                 vec![Line::from(vec![

@@ -1,6 +1,7 @@
 mod access;
 mod advanced;
 mod fs;
+mod graphics;
 mod hardware;
 mod overview;
 mod port;
@@ -26,6 +27,7 @@ use crate::{
     confirmation::cancel::CancelConfirmation,
     event::Event::{self},
     fs::Filesystem,
+    graphics::Graphics,
     network::Network,
     os::Os::{self},
     storage::Disk,
@@ -67,6 +69,7 @@ pub struct VMBuildData {
     pub disks: Vec<Disk>,
     pub fs: Vec<Filesystem>,
     pub remote_access: Option<RemoteAccess>,
+    pub graphics: Graphics,
 }
 
 impl VMBuilder {

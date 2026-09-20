@@ -1,7 +1,9 @@
 pub mod fs;
+pub mod graphics;
 pub mod network;
 pub mod port;
 pub mod storage;
+
 use anyhow::Result;
 use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc, sync::mpsc::Sender};
 
@@ -21,6 +23,7 @@ use crate::{
     access::{RemoteAccess, vnc::VncBuilder},
     event::Event,
     fs::Filesystem,
+    graphics::Graphics,
     network::Network,
     storage::{Disk, Drive, Interface},
     vm::{VM, VmId},
@@ -41,6 +44,7 @@ enum Section {
     Network,
     PortForwarding,
     RemoteAccess,
+    Graphics,
 }
 
 impl Section {
@@ -52,6 +56,7 @@ impl Section {
             Section::Network => 3,
             Section::PortForwarding => 4,
             Section::RemoteAccess => 5,
+            Section::Graphics => 6,
         }
     }
 }
@@ -73,6 +78,7 @@ pub struct EditVM {
     fs: fs::FsEdit,
     network: network::NetworkEdit,
     port_forwarding: port::PortForwarding,
+    graphics: graphics::GraphicsEdit,
     vnc: VncBuilder,
     pub vm: VM,
 }
@@ -88,6 +94,7 @@ pub struct VMEditData {
     pub networks: Vec<Network>,
     pub remote_access: Option<RemoteAccess>,
     pub fs: Vec<Filesystem>,
+    pub graphics: Graphics,
 }
 
 impl EditVM {
@@ -125,6 +132,7 @@ impl EditVM {
             fs: fs::FsEdit::new(vm.fs.clone()),
             network: network::NetworkEdit::new(networks.clone()),
             port_forwarding: port::PortForwarding::new(networks),
+            graphics: graphics::GraphicsEdit::new(&vm.graphics),
             vnc,
             vm: vm.clone(),
         }
@@ -185,6 +193,10 @@ impl EditVM {
         self.vnc.validate()
     }
 
+    pub fn validate_graphics(&mut self) -> bool {
+        self.graphics.validate()
+    }
+
     pub fn handle_key_events(
         &mut self,
         key_event: KeyEvent,
@@ -236,8 +248,10 @@ impl EditVM {
                     networks,
                     fs: self.fs.build(),
                     remote_access: self.vnc.build().map(RemoteAccess::Vnc),
+                    graphics: self.graphics.build(),
                 }));
             }
+
             KeyCode::Tab => match self.section {
                 Section::Hardware(_) => {
                     if self.validate_harware_section() {
@@ -259,6 +273,11 @@ impl EditVM {
                 }
                 Section::RemoteAccess => {
                     if self.validate_remote_access() {
+                        self.section = Section::Graphics;
+                    }
+                }
+                Section::Graphics => {
+                    if self.validate_graphics() {
                         self.section = Section::Hardware(HardwareSection::default())
                     }
                 }
@@ -266,7 +285,7 @@ impl EditVM {
             KeyCode::BackTab => match self.section {
                 Section::Hardware(_) => {
                     if self.validate_harware_section() {
-                        self.section = Section::RemoteAccess;
+                        self.section = Section::Graphics;
                     }
                 }
                 Section::Storage => {
@@ -287,6 +306,11 @@ impl EditVM {
                 Section::RemoteAccess => {
                     if self.validate_remote_access() {
                         self.section = Section::PortForwarding;
+                    }
+                }
+                Section::Graphics => {
+                    if self.validate_graphics() {
+                        self.section = Section::RemoteAccess;
                     }
                 }
             },
@@ -336,6 +360,9 @@ impl EditVM {
                 Section::RemoteAccess => {
                     self.vnc.handle_key_events(key_event);
                 }
+                Section::Graphics => {
+                    self.graphics.handle_key_events(key_event);
+                }
             },
         }
 
@@ -376,6 +403,11 @@ impl EditVM {
                 Line::from(" Remote Access 󰢹  "),
                 Line::from(""),
             ]),
+            ListItem::new(vec![
+                Line::from(""),
+                Line::from(" Graphics 󰢮  "),
+                Line::from(""),
+            ]),
         ];
 
         let list = List::new(sections)
@@ -389,7 +421,7 @@ impl EditVM {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(24),
+                Constraint::Length(27),
                 Constraint::Fill(1),
             ])
             .margin(1)
@@ -558,6 +590,9 @@ impl EditVM {
             }
             Section::RemoteAccess => {
                 self.vnc.render(frame, area, false);
+            }
+            Section::Graphics => {
+                self.graphics.render(frame, area);
             }
         }
     }
@@ -817,7 +852,7 @@ impl EditVM {
                     }
                 }
             }
-            Section::RemoteAccess => {
+            Section::RemoteAccess | Section::Graphics => {
                 vec![Line::from(vec![
                     Span::from("k,↑").bold(),
                     Span::from("  Up"),
