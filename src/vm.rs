@@ -346,6 +346,8 @@ impl VM {
 
         self.fs = data.fs;
 
+        self.graphics = data.graphics;
+
         path.push("vm.json");
         let mut file = File::create(&path)?;
         let vm = serde_json::to_string_pretty(&self)?;
