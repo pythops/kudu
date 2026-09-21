@@ -14,9 +14,9 @@ use ratatui::{
 use crate::{
     Arch,
     event::Event,
-    network,
+    graphics, network,
     os::Os::{ArchLinux, TempleOS},
-    vmbuilder::{VMBuildData, access, fs, graphics, hardware, overview, port, storage},
+    vmbuilder::{VMBuildData, access, fs, hardware, overview, port, storage},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -67,7 +67,7 @@ impl Advanced {
             network,
             port_fowrwaring,
             remote_access: access::RemoteAccessBuilder::new(),
-            graphics: graphics::GraphicsBuilder::new(),
+            graphics: graphics::GraphicsBuilder::new(None),
         }
     }
 

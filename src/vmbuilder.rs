@@ -1,7 +1,6 @@
 mod access;
 mod advanced;
 mod fs;
-mod graphics;
 mod hardware;
 mod overview;
 mod port;

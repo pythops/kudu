@@ -1,5 +1,4 @@
 pub mod fs;
-pub mod graphics;
 pub mod network;
 pub mod port;
 pub mod storage;
@@ -23,7 +22,7 @@ use crate::{
     access::{RemoteAccess, vnc::VncBuilder},
     event::Event,
     fs::Filesystem,
-    graphics::Graphics,
+    graphics::{self, Graphics},
     network::Network,
     storage::{Disk, Drive, Interface},
     vm::{VM, VmId},
@@ -78,7 +77,7 @@ pub struct EditVM {
     fs: fs::FsEdit,
     network: network::NetworkEdit,
     port_forwarding: port::PortForwarding,
-    graphics: graphics::GraphicsEdit,
+    graphics: graphics::GraphicsBuilder,
     vnc: VncBuilder,
     pub vm: VM,
 }
@@ -132,7 +131,7 @@ impl EditVM {
             fs: fs::FsEdit::new(vm.fs.clone()),
             network: network::NetworkEdit::new(networks.clone()),
             port_forwarding: port::PortForwarding::new(networks),
-            graphics: graphics::GraphicsEdit::new(&vm.graphics),
+            graphics: graphics::GraphicsBuilder::new(Some(&vm.graphics)),
             vnc,
             vm: vm.clone(),
         }
