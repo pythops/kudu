@@ -196,6 +196,10 @@ impl EditVM {
         self.graphics.validate()
     }
 
+    fn validate(&mut self) -> bool {
+        self.graphics.validate() && self.validate_remote_access()
+    }
+
     pub fn handle_key_events(
         &mut self,
         key_event: KeyEvent,
@@ -224,31 +228,33 @@ impl EditVM {
 
         match key_event.code {
             KeyCode::Enter => {
-                let mut networks = self.network.build();
-                for (network_id, mapping) in &self.port_forwarding.added_port_mappings {
-                    if let Some(network) = networks.iter_mut().find(|n| &n.id == network_id) {
-                        network.port_mappings.push(*mapping);
+                if self.validate() {
+                    let mut networks = self.network.build();
+                    for (network_id, mapping) in &self.port_forwarding.added_port_mappings {
+                        if let Some(network) = networks.iter_mut().find(|n| &n.id == network_id) {
+                            network.port_mappings.push(*mapping);
+                        }
                     }
-                }
 
-                for (network_id, mapping) in &self.port_forwarding.deleted_port_mappings {
-                    if let Some(network) = networks.iter_mut().find(|n| &n.id == network_id) {
-                        network.port_mappings.retain(|m| m != mapping);
+                    for (network_id, mapping) in &self.port_forwarding.deleted_port_mappings {
+                        if let Some(network) = networks.iter_mut().find(|n| &n.id == network_id) {
+                            network.port_mappings.retain(|m| m != mapping);
+                        }
                     }
-                }
 
-                let _ = sender.send(Event::VMEdited(VMEditData {
-                    id: self.vm.id,
-                    deleted_drive_paths: self.storage.deleted_drive_paths(),
-                    added_disks: self.storage.added_disks(),
-                    resized_drives: self.storage.resized_drives(),
-                    new_vcpu: self.vcpu.field.value().parse::<u16>().unwrap(),
-                    new_memory: self.memory.field.value().parse::<u32>().unwrap(),
-                    networks,
-                    fs: self.fs.build(),
-                    remote_access: self.vnc.build().map(RemoteAccess::Vnc),
-                    graphics: self.graphics.build(),
-                }));
+                    let _ = sender.send(Event::VMEdited(VMEditData {
+                        id: self.vm.id,
+                        deleted_drive_paths: self.storage.deleted_drive_paths(),
+                        added_disks: self.storage.added_disks(),
+                        resized_drives: self.storage.resized_drives(),
+                        new_vcpu: self.vcpu.field.value().parse::<u16>().unwrap(),
+                        new_memory: self.memory.field.value().parse::<u32>().unwrap(),
+                        networks,
+                        fs: self.fs.build(),
+                        remote_access: self.vnc.build().map(RemoteAccess::Vnc),
+                        graphics: self.graphics.build(),
+                    }));
+                }
             }
 
             KeyCode::Tab => match self.section {

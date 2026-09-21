@@ -49,8 +49,17 @@ pub struct VirtioConfig {
 }
 
 impl Graphics {
+    pub fn is_gl_on(&self) -> bool {
+        match self.device {
+            GraphicsDevice::Virtio(config) => {
+                config.enable_3d && (self.display == Display::Gtk || self.display == Display::Sdl)
+            }
+            _ => false,
+        }
+    }
+
     pub fn to_qemu_arg(&self) -> Vec<String> {
-        let display = match self.display {
+        let mut display = match self.display {
             Display::None => vec!["-display".to_string(), "none".to_string()],
             Display::EglHeadless => vec!["-display".to_string(), "egl-headless".to_string()],
             Display::Sdl => vec!["-display".to_string(), "sdl".to_string()],
@@ -89,6 +98,7 @@ impl Graphics {
                             "virtio-vga-gl,hostmem=8G,blob=true".to_string(),
                         ]);
                     }
+                    display[1] = format!("{},gl=on", display[1]);
                 } else {
                     arg.extend(vec!["-device".to_string(), "virtio-vga".to_string()]);
                 }
@@ -142,6 +152,7 @@ pub struct GraphicsBuilder {
     memory: UserInputField,
     enable_3d: bool,
     venus: bool,
+    display_error: Option<String>,
 }
 
 impl GraphicsBuilder {
@@ -179,6 +190,7 @@ impl GraphicsBuilder {
                     },
                     enable_3d,
                     venus,
+                    display_error: None,
                 }
             }
             None => Self {
@@ -191,8 +203,13 @@ impl GraphicsBuilder {
                 },
                 enable_3d: false,
                 venus: false,
+                display_error: None,
             },
         }
+    }
+
+    fn clear_errors(&mut self) {
+        self.display_error = None;
     }
 
     pub fn build(&self) -> Graphics {
@@ -262,11 +279,27 @@ impl GraphicsBuilder {
                 }
             },
             KeyCode::Up | KeyCode::Char('k') => match self.section {
-                Section::Device => {}
-                Section::Display => {}
-                Section::Memory => {}
-                Section::Enable3d => {}
-                Section::Venus => {}
+                Section::Device => match self.device {
+                    Device::Qxl | Device::Std => {
+                        self.section = Section::Memory;
+                    }
+                    Device::Virtio => {
+                        self.section = Section::Venus;
+                    }
+                    _ => {}
+                },
+                Section::Display => {
+                    self.section = Section::Device;
+                }
+                Section::Memory => {
+                    self.section = Section::Display;
+                }
+                Section::Enable3d => {
+                    self.section = Section::Display;
+                }
+                Section::Venus => {
+                    self.section = Section::Enable3d;
+                }
             },
             _ => match self.section {
                 Section::Device => match key_event.code {
@@ -309,6 +342,7 @@ impl GraphicsBuilder {
                                 field: Input::from("16"),
                                 error: None,
                             };
+                            self.clear_errors();
                         }
                         Device::None => {
                             self.device = Device::Virtio;
@@ -320,6 +354,7 @@ impl GraphicsBuilder {
                     KeyCode::Char('l') | KeyCode::Right => match self.display {
                         Display::None => {
                             self.display = Display::Gtk;
+                            self.clear_errors();
                         }
                         Display::Gtk => {
                             self.display = Display::Sdl;
@@ -331,7 +366,21 @@ impl GraphicsBuilder {
                             self.display = Display::None;
                         }
                     },
-                    KeyCode::Char('h') | KeyCode::Left => {}
+                    KeyCode::Char('h') | KeyCode::Left => match self.display {
+                        Display::None => {
+                            self.display = Display::EglHeadless;
+                            self.clear_errors();
+                        }
+                        Display::Gtk => {
+                            self.display = Display::None;
+                        }
+                        Display::Sdl => {
+                            self.display = Display::Gtk;
+                        }
+                        Display::EglHeadless => {
+                            self.display = Display::Sdl;
+                        }
+                    },
                     _ => {}
                 },
                 Section::Memory => {
@@ -342,20 +391,12 @@ impl GraphicsBuilder {
                 Section::Enable3d => match key_event.code {
                     KeyCode::Left | KeyCode::Char('h') | KeyCode::Right | KeyCode::Char('l') => {
                         self.enable_3d = !self.enable_3d;
-
-                        if self.enable_3d && self.display == Display::None {
-                            self.display = Display::EglHeadless;
-                        }
                     }
                     _ => {}
                 },
                 Section::Venus => match key_event.code {
                     KeyCode::Left | KeyCode::Char('h') | KeyCode::Right | KeyCode::Char('l') => {
                         self.venus = !self.venus;
-
-                        if self.venus && self.display == Display::None {
-                            self.display = Display::EglHeadless;
-                        }
                     }
                     _ => {}
                 },
@@ -390,6 +431,10 @@ impl GraphicsBuilder {
                         }
                     }
                 }
+            }
+            Device::Virtio if self.enable_3d && self.display == Display::None => {
+                self.display_error = Some("Display value can not be None".into());
+                valid = false;
             }
             _ => {}
         }
@@ -429,6 +474,7 @@ impl GraphicsBuilder {
                 Span::from(format!("< {} >", self.device)),
             ]),
             Row::new(Line::from("")),
+            Row::new(Line::from("")),
         ];
 
         if self.device != Device::None {
@@ -442,6 +488,10 @@ impl GraphicsBuilder {
                         }
                     },
                     Span::from(format!("< {} >", self.display)),
+                ]),
+                Row::new(vec![
+                    Span::from(""),
+                    Span::from(self.display_error.clone().unwrap_or_default()).red(),
                 ]),
                 Row::new(Line::from("")),
             ])
@@ -479,6 +529,7 @@ impl GraphicsBuilder {
                         Span::from(""),
                         Span::from(self.memory.clone().error.unwrap_or("".into())).red(),
                     ]),
+                    Row::new(Line::from("")),
                 ]);
             }
             Device::Virtio => rows.extend(vec![
@@ -498,6 +549,7 @@ impl GraphicsBuilder {
                         }
                     }),
                 ]),
+                Row::new(Line::from("")),
                 Row::new(Line::from("")),
                 Row::new(vec![
                     {

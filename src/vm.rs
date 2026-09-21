@@ -780,7 +780,7 @@ impl VM {
                     vec![
                         Line::from(vec![
                             Span::from("Filesystem").bold().fg(Color::Yellow),
-                            Span::from(" ".repeat(3)),
+                            Span::from(" ".repeat(7)),
                             Span::from(" - "),
                         ]),
                         Line::from(""),
@@ -935,6 +935,7 @@ impl VM {
 
         if let Some(vnc_info) = self.vnc.clone()
             && let Some(RemoteAccess::Vnc(vnc)) = &self.remote_access
+            && !self.graphics.is_gl_on()
         {
             items.push(ListItem::from(vec![
                 Line::from(vec![

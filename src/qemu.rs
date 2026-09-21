@@ -72,17 +72,19 @@ impl Qemu {
             command.arg("-enable-kvm");
         }
 
-        if let Some(remote_access) = &vm.remote_access {
-            command.args(remote_access.to_qemu_arg());
-        } else {
-            command.arg("-vnc").arg("none");
+        command.args(vm.graphics.to_qemu_arg());
+
+        if !vm.graphics.is_gl_on() {
+            if let Some(remote_access) = &vm.remote_access {
+                command.args(remote_access.to_qemu_arg());
+            } else {
+                command.arg("-vnc").arg("none");
+            }
         }
 
         for fs in &vm.fs {
             command.args(fs.to_qemu_arg());
         }
-
-        command.args(vm.graphics.to_qemu_arg());
 
         command
             .arg("-daemonize")
