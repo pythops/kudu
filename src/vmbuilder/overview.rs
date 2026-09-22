@@ -14,6 +14,7 @@ use tui_input::{Input, backend::crossterm::EventHandler};
 use crate::{
     BootOption,
     os::{Os, debian::DebianRelease, ubuntu::UbuntuRelease},
+    storage::{self, Interface},
 };
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -22,6 +23,7 @@ enum Section {
     Name,
     BootOption,
     LocalFile,
+    StorageInterface,
     OS,
     Release,
     Cloudinit,
@@ -40,6 +42,7 @@ pub struct Overview {
     boot_option: BootOption,
     cloudinit: UserInputField,
     boot_file: UserInputField,
+    local_file_interface: storage::Interface,
     os: Os,
     ubuntu_release: UbuntuRelease,
     debian_release: DebianRelease,
@@ -66,11 +69,14 @@ impl Overview {
             Some(PathBuf::from(self.cloudinit.field.value()))
         }
     }
-    pub fn boot_file(&self) -> Option<PathBuf> {
+    pub fn boot_file(&self) -> Option<(PathBuf, Interface)> {
         if self.boot_file.field.value().is_empty() {
             None
         } else {
-            Some(PathBuf::from(self.boot_file.field.value()))
+            Some((
+                PathBuf::from(self.boot_file.field.value()),
+                self.local_file_interface,
+            ))
         }
     }
 
@@ -129,13 +135,29 @@ impl Overview {
                     self.section = Section::BootOption;
                 }
                 KeyCode::Down => {
-                    self.section = Section::Cloudinit;
+                    self.section = Section::StorageInterface;
                 }
                 _ => {
                     self.boot_file
                         .field
                         .handle_event(&crossterm::event::Event::Key(key_event));
                 }
+            },
+            Section::StorageInterface => match key_event.code {
+                KeyCode::Up | KeyCode::Char('k') => {
+                    self.section = Section::LocalFile;
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    self.section = Section::Cloudinit;
+                }
+                KeyCode::Left | KeyCode::Char('h') | KeyCode::Right | KeyCode::Char('l') => {
+                    if self.local_file_interface == Interface::Virtio {
+                        self.local_file_interface = Interface::Ide;
+                    } else {
+                        self.local_file_interface = Interface::Virtio;
+                    }
+                }
+                _ => {}
             },
             Section::OS => match key_event.code {
                 KeyCode::Up | KeyCode::Char('k') => {
@@ -233,7 +255,7 @@ impl Overview {
                         self.section = Section::Release;
                     }
                     BootOption::LocalFile => {
-                        self.section = Section::LocalFile;
+                        self.section = Section::StorageInterface;
                     }
                 },
                 KeyCode::Down => {
@@ -469,6 +491,18 @@ impl Overview {
             ]),
         ];
 
+        let local_file_interface = Line::from(vec![
+            {
+                if self.section == Section::StorageInterface {
+                    Span::from("> Interface ").bold()
+                } else {
+                    Span::from("  Interface ")
+                }
+            },
+            Span::from(" ".repeat(2)),
+            Span::from(format!("< {} >", self.local_file_interface)),
+        ]);
+
         let cloudinit = vec![
             Line::from(vec![
                 {
@@ -517,6 +551,7 @@ impl Overview {
             }
             BootOption::LocalFile => {
                 frame.render_widget(Text::from(boot_file), os_block);
+                frame.render_widget(Text::from(local_file_interface), release_block);
             }
         }
         frame.render_widget(Text::from(cloudinit), cloudinit_block);

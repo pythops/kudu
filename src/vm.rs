@@ -242,7 +242,7 @@ impl VM {
             path.pop();
         }
 
-        if let Some(path) = data.boot_file {
+        if let Some((path, interface)) = data.boot_file {
             let format = Drive::format(&path).unwrap();
             let (media, read_only) = if format == Format::Qcow2 {
                 (Media::Disk, false)
@@ -252,7 +252,7 @@ impl VM {
 
             let drive = Drive {
                 path: path.clone(),
-                interface: Interface::Virtio,
+                interface,
                 format,
                 media,
                 read_only,
