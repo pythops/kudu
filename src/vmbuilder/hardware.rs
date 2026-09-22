@@ -207,7 +207,7 @@ impl Hardware {
                 }
             },
             Section::Arch => match os {
-                Some(Os::TempleOS) | Some(Os::ArchLinux) => match key_event.code {
+                Some(Os::ArchLinux) => match key_event.code {
                     KeyCode::Up | KeyCode::Char('k') => {
                         self.section = Section::Memory;
                     }
@@ -296,49 +296,26 @@ impl Hardware {
                     _ => {}
                 },
             },
-            Section::Uefi => {
-                if os == Some(Os::TempleOS) {
-                    match key_event.code {
-                        KeyCode::Up | KeyCode::Char('k') => {
-                            self.section = Section::Arch;
-                        }
-                        KeyCode::Down | KeyCode::Char('j') => {
-                            self.section = Section::Cpu;
-                        }
-                        _ => {}
-                    }
-                } else {
-                    match key_event.code {
-                        KeyCode::Right
-                        | KeyCode::Char('l')
-                        | KeyCode::Left
-                        | KeyCode::Char('h')
-                            if self.arch == Arch::X86_64 =>
-                        {
-                            if INSTALLED_UEFI.contains(&Arch::X86_64) {
-                                self.enable_uefi = !self.enable_uefi;
-                            }
-                        }
-                        KeyCode::Up | KeyCode::Char('k') => {
-                            self.section = Section::Arch;
-                        }
-                        KeyCode::Down | KeyCode::Char('j') => {
-                            self.section = Section::Cpu;
-                        }
-                        _ => {}
+            Section::Uefi => match key_event.code {
+                KeyCode::Right | KeyCode::Char('l') | KeyCode::Left | KeyCode::Char('h')
+                    if self.arch == Arch::X86_64 =>
+                {
+                    if INSTALLED_UEFI.contains(&Arch::X86_64) {
+                        self.enable_uefi = !self.enable_uefi;
                     }
                 }
-            }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    self.section = Section::Arch;
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    self.section = Section::Cpu;
+                }
+                _ => {}
+            },
         }
     }
 
-    pub fn render(
-        &self,
-        frame: &mut Frame,
-        area: Rect,
-        os: Option<Os>,
-        cancel_confirmation_popup: bool,
-    ) {
+    pub fn render(&self, frame: &mut Frame, area: Rect, cancel_confirmation_popup: bool) {
         let (cpu_block, memory_block, arch_block, uefi_block) = {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
@@ -440,7 +417,7 @@ impl Hardware {
             Span::from(" ".repeat(6)),
             Span::from({
                 if self.arch == Arch::X86_64 {
-                    if os == Some(Os::TempleOS) || !INSTALLED_UEFI.contains(&Arch::X86_64) {
+                    if !INSTALLED_UEFI.contains(&Arch::X86_64) {
                         "[x] BIOS"
                     } else if self.enable_uefi {
                         "[x] UEFI        [ ] BIOS"

@@ -15,7 +15,7 @@ use crate::{
     Arch,
     event::Event,
     graphics, network,
-    os::Os::{ArchLinux, TempleOS},
+    os::Os::ArchLinux,
     vmbuilder::{VMBuildData, access, fs, hardware, overview, port, storage},
 };
 
@@ -163,10 +163,6 @@ impl Advanced {
             KeyCode::BackTab => match self.focused_section {
                 Section::Overview => {
                     if self.validate_overview_section() {
-                        if self.overview.os() == Some(TempleOS) {
-                            self.hardware.set_arch(Arch::X86_64);
-                            self.hardware.set_uefi(false);
-                        }
                         if self.overview.os() == Some(ArchLinux) {
                             self.hardware.set_arch(Arch::X86_64);
                         }
@@ -361,8 +357,7 @@ impl Advanced {
             }
 
             Section::Hardware => {
-                self.hardware
-                    .render(frame, area, self.overview.os(), cancel_popup);
+                self.hardware.render(frame, area, cancel_popup);
             }
 
             Section::Storage => {

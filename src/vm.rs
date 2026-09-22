@@ -36,7 +36,7 @@ use crate::{
     graphics::Graphics,
     network::{Network, NetworkBackend, bridge::Bridge},
     notification::{self, Notification, NotificationLevel},
-    os::Os::{self, TempleOS},
+    os::Os::{self},
     qemu::Qemu,
     storage::{Drive, Format, Interface, Media},
     vmbuilder::VMBuildData,
@@ -459,34 +459,18 @@ impl VM {
                     let _ = sender.send(Event::Notification(Notification::error(e)));
                 }
 
-                if Some(TempleOS) == self.os {
-                    let drive = Drive {
-                        path: self.get_boot_file(),
-                        interface: Interface::Ide,
-                        media: Media::CdRom,
-                        format: Format::Raw,
-                        unit: None,
-                        read_only: true,
-                        size: None,
-                    };
+                let drive = Drive {
+                    path: self.get_boot_file(),
+                    interface: Interface::Virtio,
+                    media: Media::Disk,
+                    format: Format::Qcow2,
+                    unit: None,
+                    read_only: false,
+                    size: Drive::size(&self.get_boot_file()).ok(),
+                };
 
-                    if !self.drives.contains(&drive) {
-                        self.drives.push(drive);
-                    }
-                } else {
-                    let drive = Drive {
-                        path: self.get_boot_file(),
-                        interface: Interface::Virtio,
-                        media: Media::Disk,
-                        format: Format::Qcow2,
-                        unit: None,
-                        read_only: false,
-                        size: Drive::size(&self.get_boot_file()).ok(),
-                    };
-
-                    if !self.drives.contains(&drive) {
-                        self.drives.push(drive);
-                    }
+                if !self.drives.contains(&drive) {
+                    self.drives.push(drive);
                 }
 
                 let mut path = get_kudu_data_dir().join("vms");

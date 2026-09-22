@@ -80,7 +80,6 @@ impl Overview {
                 Os::Debian(_) => Some(Os::Debian(self.debian_release)),
                 Os::Ubuntu(_) => Some(Os::Ubuntu(self.ubuntu_release)),
                 Os::ArchLinux => Some(Os::ArchLinux),
-                Os::TempleOS => Some(Os::TempleOS),
             },
             BootOption::LocalFile => None,
         }
@@ -153,24 +152,18 @@ impl Overview {
                         self.os = Os::ArchLinux;
                     }
                     Os::ArchLinux => {
-                        self.os = Os::TempleOS;
-                    }
-                    Os::TempleOS => {
                         self.os = Os::Debian(DebianRelease::default());
                     }
                 },
                 KeyCode::Right | KeyCode::Char('l') => match self.os {
                     Os::Debian(_) => {
-                        self.os = Os::TempleOS;
+                        self.os = Os::ArchLinux;
                     }
                     Os::Ubuntu(_) => {
                         self.os = Os::Debian(DebianRelease::default());
                     }
                     Os::ArchLinux => {
                         self.os = Os::Ubuntu(UbuntuRelease::default());
-                    }
-                    Os::TempleOS => {
-                        self.os = Os::ArchLinux;
                     }
                 },
                 _ => {}
@@ -183,7 +176,7 @@ impl Overview {
                     self.section = Section::Cloudinit;
                 }
                 KeyCode::Right | KeyCode::Char('l') => match self.os {
-                    Os::ArchLinux | Os::TempleOS => {}
+                    Os::ArchLinux => {}
                     Os::Debian(_) => match self.debian_release {
                         DebianRelease::Trixie => {
                             self.debian_release = DebianRelease::Bookworm;
@@ -208,7 +201,7 @@ impl Overview {
                     },
                 },
                 KeyCode::Left | KeyCode::Char('h') => match self.os {
-                    Os::ArchLinux | Os::TempleOS => {}
+                    Os::ArchLinux => {}
                     Os::Debian(_) => match self.debian_release {
                         DebianRelease::Trixie => {
                             self.debian_release = DebianRelease::Forky;
@@ -439,7 +432,7 @@ impl Overview {
                             self.debian_release, self.debian_release as u8,
                         )
                     }
-                    Os::ArchLinux | Os::TempleOS => "-".to_string(),
+                    Os::ArchLinux => "-".to_string(),
                 }
             }),
         ]);

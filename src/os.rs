@@ -34,9 +34,6 @@ pub enum Os {
 
     #[strum(to_string = "Ubuntu  ")]
     Ubuntu(UbuntuRelease),
-
-    #[strum(to_string = "TempleOS 󰓥 ")]
-    TempleOS,
 }
 
 impl Default for Os {
@@ -67,9 +64,6 @@ impl Os {
             Os::ArchLinux => {
                 path.push("arch.qcow2");
             }
-            Os::TempleOS => {
-                path.push("templeos.iso");
-            }
         }
 
         path
@@ -84,7 +78,6 @@ impl Os {
                 "https://geo.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2"
                     .to_string()
             }
-            Os::TempleOS => "https://templeos.org/Downloads/TempleOS.ISO".to_string(),
         };
 
         if !path.exists() {

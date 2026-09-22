@@ -188,7 +188,6 @@ impl Quick {
                         Os::ArchLinux => {
                             self.os = Os::Debian(DebianRelease::default());
                         }
-                        _ => {}
                     },
                     KeyCode::Right | KeyCode::Char('l') => match self.os {
                         Os::Debian(_) => {
@@ -200,7 +199,6 @@ impl Quick {
                         Os::ArchLinux => {
                             self.os = Os::Ubuntu(UbuntuRelease::default());
                         }
-                        _ => {}
                     },
                     _ => {}
                 },
