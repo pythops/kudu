@@ -90,17 +90,17 @@ impl Graphics {
                     if config.venus {
                         arg.extend(vec![
                             "-device".to_string(),
-                            "virtio-vga-gl,hostmem=8G,blob=true,venus=true".to_string(),
+                            "virtio-gpu-gl,hostmem=8G,blob=true,venus=true".to_string(),
                         ]);
                     } else {
                         arg.extend(vec![
                             "-device".to_string(),
-                            "virtio-vga-gl,hostmem=8G,blob=true".to_string(),
+                            "virtio-gpu-gl,hostmem=8G,blob=true".to_string(),
                         ]);
                     }
                     display[1] = format!("{},gl=on", display[1]);
                 } else {
-                    arg.extend(vec!["-device".to_string(), "virtio-vga".to_string()]);
+                    arg.extend(vec!["-device".to_string(), "virtio-gpu".to_string()]);
                 }
 
                 arg
