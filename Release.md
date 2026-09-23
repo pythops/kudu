@@ -1,3 +1,11 @@
+## v0.4.0 - 2026-09-23
+
+- Add graphics config with different drivers
+- Add file sharing between host and guest
+- Remove templeos
+- Add ability to choose storage interface when booting from local file
+- Small layout improvements
+
 ## v0.3.0 - 2026-09-01
 
 - Resize disks
