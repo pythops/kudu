@@ -316,9 +316,9 @@ impl NewNetwork {
                 Section::Backend => match key_event.code {
                     KeyCode::Right | KeyCode::Char('l') => match self.backend {
                         NetworkBackend::Passt => {
-                            self.backend = NetworkBackend::User;
+                            self.backend = NetworkBackend::Slirp;
                         }
-                        NetworkBackend::User => {
+                        NetworkBackend::Slirp => {
                             if unsafe { USER_UID == 0 } {
                                 self.backend = NetworkBackend::Tap;
                             } else {
@@ -337,14 +337,14 @@ impl NewNetwork {
                             if unsafe { USER_UID == 0 } {
                                 self.backend = NetworkBackend::Bridge(KUDU_BRIDGE_INTERFACE.into());
                             } else {
-                                self.backend = NetworkBackend::User;
+                                self.backend = NetworkBackend::Slirp;
                             }
                         }
-                        NetworkBackend::User => {
+                        NetworkBackend::Slirp => {
                             self.backend = NetworkBackend::Passt;
                         }
                         NetworkBackend::Tap => {
-                            self.backend = NetworkBackend::User;
+                            self.backend = NetworkBackend::Slirp;
                         }
                         NetworkBackend::Bridge(_) => {
                             self.backend = NetworkBackend::Tap;

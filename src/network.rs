@@ -32,7 +32,7 @@ pub enum Nic {
 #[derive(Debug, Clone, Default, PartialEq, strum::Display, Deserialize, Serialize)]
 pub enum NetworkBackend {
     #[default]
-    User,
+    Slirp,
     Passt,
     Tap,
     #[strum(to_string = "Bridge({0})")]
@@ -105,7 +105,7 @@ impl Network {
 
                 [&device[..], &netdev[..]].concat()
             }
-            NetworkBackend::User => {
+            NetworkBackend::Slirp => {
                 let mapping_arg = self
                     .port_mappings
                     .iter()

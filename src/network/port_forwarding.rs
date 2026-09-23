@@ -56,7 +56,7 @@ pub struct MappingBuilder {
 impl MappingBuilder {
     pub fn new(networks: Rc<RefCell<Vec<Network>>>) -> Self {
         networks.borrow_mut().retain(|network| {
-            network.backend == NetworkBackend::Passt || network.backend == NetworkBackend::User
+            network.backend == NetworkBackend::Passt || network.backend == NetworkBackend::Slirp
         });
 
         MappingBuilder {
