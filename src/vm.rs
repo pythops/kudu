@@ -644,14 +644,32 @@ impl VM {
         ];
 
         if self.boot_option == BootOption::CloudImage {
+            let os = self.os.unwrap();
             items.push(ListItem::from(vec![
                 Line::from(vec![
                     Span::from("OS").bold().fg(Color::Yellow),
                     Span::from(" ".repeat(15)),
-                    Span::from(self.os.unwrap().to_string()),
+                    Span::from(os.to_string()),
                 ]),
                 Line::from(""),
-            ]))
+            ]));
+
+            let version = match os {
+                Os::Debian(release) => Some(release.get_version_number()),
+                Os::Ubuntu(release) => Some(release.get_version_number()),
+                Os::Freebsd(release) => Some(release.get_version_number()),
+                _ => None,
+            };
+            if let Some(version) = version {
+                items.push(ListItem::from(vec![
+                    Line::from(vec![
+                        Span::from("Release").bold().fg(Color::Yellow),
+                        Span::raw("          "),
+                        Span::raw(version),
+                    ]),
+                    Line::from(""),
+                ]));
+            }
         }
         items.extend(vec![
             ListItem::from(vec![

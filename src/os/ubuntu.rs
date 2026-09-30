@@ -18,19 +18,16 @@ impl UbuntuRelease {
             Arch::Riscv64 => "riscv64",
         };
 
-        format!(
-            "https://cloud-images.ubuntu.com/{}/current/{}-server-cloudimg-{}.img",
-            self.to_string().to_lowercase(),
-            self.to_string().to_lowercase(),
-            arch
-        )
+        let name = self.to_string().to_lowercase();
+
+        format!("https://cloud-images.ubuntu.com/{name}/current/{name}-server-cloudimg-{arch}.img",)
     }
 
-    pub fn get_number(&self) -> f32 {
+    pub fn get_version_number(&self) -> &'static str {
         match self {
-            UbuntuRelease::Resolute => 26.04,
-            UbuntuRelease::Noble => 24.04,
-            UbuntuRelease::Jammy => 22.04,
+            UbuntuRelease::Resolute => "26.04",
+            UbuntuRelease::Noble => "24.04",
+            UbuntuRelease::Jammy => "22.04",
         }
     }
 }

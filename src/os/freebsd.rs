@@ -36,4 +36,12 @@ impl FreebsdRelease {
             }
         }
     }
+
+    pub fn get_version_number(&self) -> &'static str {
+        match self {
+            FreebsdRelease::V14 => "14",
+            FreebsdRelease::V15 => "15",
+            FreebsdRelease::V16 => "16",
+        }
+    }
 }

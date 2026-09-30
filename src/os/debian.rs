@@ -5,9 +5,9 @@ use crate::Arch;
 #[derive(Debug, Default, Clone, Copy, PartialEq, strum::Display, Deserialize, Serialize)]
 pub enum DebianRelease {
     #[default]
-    Trixie = 13,
-    Bookworm = 12,
-    Forky = 14,
+    Trixie,
+    Bookworm,
+    Forky,
 }
 
 impl DebianRelease {
@@ -18,11 +18,19 @@ impl DebianRelease {
             Arch::Riscv64 => "riscv64",
         };
 
+        let name = self.to_string().to_lowercase();
+        let version = self.get_version_number();
+
         format!(
-            "http://cloud.debian.org/images/cloud/{}/latest/debian-{}-generic-{}.qcow2",
-            self.to_string().to_lowercase(),
-            *self as u8,
-            arch
+            "http://cloud.debian.org/images/cloud/{name}/latest/debian-{version}-generic-{arch}.qcow2",
         )
+    }
+
+    pub fn get_version_number(&self) -> &'static str {
+        match self {
+            DebianRelease::Trixie => "13",
+            DebianRelease::Bookworm => "12",
+            DebianRelease::Forky => "14",
+        }
     }
 }

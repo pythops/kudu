@@ -522,12 +522,13 @@ impl Quick {
                     Os::Ubuntu(_) => format!(
                         "< {} - {} >",
                         self.ubuntu_release,
-                        self.ubuntu_release.get_number()
+                        self.ubuntu_release.get_version_number()
                     ),
                     Os::Debian(_) => {
                         format!(
                             "< {} - {} >",
-                            self.debian_release, self.debian_release as u8,
+                            self.debian_release,
+                            self.debian_release.get_version_number(),
                         )
                     }
                     Os::Freebsd(_) => {
