@@ -20,6 +20,7 @@
   - `qemu-system-riscv`
 - `xorriso` for cloudinit
 - `passt`
+- `xz`
 - uefi firmware package (Optional for x86_64)
 
   |             | Debian/Ubuntu    | Arch (btw)   | Fedora       |

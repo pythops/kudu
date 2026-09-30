@@ -1,4 +1,5 @@
 pub mod debian;
+pub mod freebsd;
 pub mod ubuntu;
 
 use debian::DebianRelease;
@@ -8,6 +9,7 @@ use std::{
     fs,
     io::Read,
     path::{Path, PathBuf},
+    process::{Command, Stdio},
     sync::mpsc::Sender,
     time::{Duration, Instant},
 };
@@ -34,6 +36,9 @@ pub enum Os {
 
     #[strum(to_string = "Ubuntu  ")]
     Ubuntu(UbuntuRelease),
+
+    #[strum(to_string = "FreeBSD  ")]
+    Freebsd(freebsd::FreebsdRelease),
 }
 
 impl Default for Os {
@@ -61,6 +66,13 @@ impl Os {
                     arch.to_string().to_lowercase()
                 ));
             }
+            Os::Freebsd(release) => {
+                path.push(format!(
+                    "freebsd-{}-{}.qcow2",
+                    release.to_string().to_lowercase(),
+                    arch.to_string().to_lowercase()
+                ));
+            }
             Os::ArchLinux => {
                 path.push("arch.qcow2");
             }
@@ -69,11 +81,12 @@ impl Os {
         path
     }
     pub fn download(&self, arch: Arch, sender: Sender<Event>, id: VmId) -> Result<()> {
-        let path = self.get_file_path(arch);
+        let mut path = self.get_file_path(arch);
 
         let url = match self {
             Os::Debian(release) => release.get_url(arch),
             Os::Ubuntu(release) => release.get_url(arch),
+            Os::Freebsd(release) => release.get_url(arch),
             Os::ArchLinux => {
                 "https://geo.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2"
                     .to_string()
@@ -101,9 +114,21 @@ impl Os {
                 match response.read(&mut buffer) {
                     Ok(n) => {
                         if !content.is_empty() && n == 0 {
+                            let file_name = path.file_name().unwrap().to_str().unwrap();
+                            path.set_file_name(format!("{file_name}.xz"));
+                            fs::write(&path, content)?;
+
+                            if let Os::Freebsd(_) = self {
+                                let mut command = Command::new("xz");
+                                command.arg("--decompress").arg(path);
+                                command
+                                    .stdout(Stdio::null())
+                                    .stderr(Stdio::piped())
+                                    .output()?;
+                            }
+
                             let _ =
                                 sender.send(Event::Download((id, DownloadEvent::Progress(100u8))));
-                            fs::write(path, content)?;
                             break;
                         }
 

@@ -10,7 +10,7 @@ use crate::{
     event::Event,
     graphics::Graphics,
     network,
-    os::{Os, debian::DebianRelease, ubuntu::UbuntuRelease},
+    os::{Os, debian::DebianRelease, freebsd::FreebsdRelease, ubuntu::UbuntuRelease},
     vmbuilder::VMBuildData,
 };
 use crossterm::event::{KeyCode, KeyEvent};
@@ -52,6 +52,7 @@ pub struct Quick {
     password: UserInputField,
     ubuntu_release: UbuntuRelease,
     debian_release: DebianRelease,
+    freebsd_release: FreebsdRelease,
 }
 
 impl Default for Quick {
@@ -78,6 +79,7 @@ impl Default for Quick {
             },
             ubuntu_release: UbuntuRelease::default(),
             debian_release: DebianRelease::default(),
+            freebsd_release: FreebsdRelease::default(),
         }
     }
 }
@@ -91,7 +93,12 @@ impl Quick {
         self.name.field.value().to_string()
     }
     pub fn os(&self) -> Os {
-        self.os
+        match self.os {
+            Os::Debian(_) => Os::Debian(self.debian_release),
+            Os::Ubuntu(_) => Os::Ubuntu(self.ubuntu_release),
+            Os::ArchLinux => Os::ArchLinux,
+            Os::Freebsd(_) => Os::Freebsd(self.freebsd_release),
+        }
     }
 
     pub fn vcpu(&self) -> u16 {
@@ -186,18 +193,24 @@ impl Quick {
                             self.os = Os::ArchLinux;
                         }
                         Os::ArchLinux => {
+                            self.os = Os::Freebsd(FreebsdRelease::default());
+                        }
+                        Os::Freebsd(_) => {
                             self.os = Os::Debian(DebianRelease::default());
                         }
                     },
                     KeyCode::Right | KeyCode::Char('l') => match self.os {
                         Os::Debian(_) => {
-                            self.os = Os::ArchLinux;
+                            self.os = Os::Freebsd(FreebsdRelease::default());
                         }
                         Os::Ubuntu(_) => {
                             self.os = Os::Debian(DebianRelease::default());
                         }
                         Os::ArchLinux => {
                             self.os = Os::Ubuntu(UbuntuRelease::default());
+                        }
+                        Os::Freebsd(_) => {
+                            self.os = Os::ArchLinux;
                         }
                     },
                     _ => {}
@@ -226,6 +239,17 @@ impl Quick {
                                 self.ubuntu_release = UbuntuRelease::Resolute;
                             }
                         },
+                        Os::Freebsd(_) => match self.freebsd_release {
+                            FreebsdRelease::V14 => {
+                                self.freebsd_release = FreebsdRelease::V15;
+                            }
+                            FreebsdRelease::V15 => {
+                                self.freebsd_release = FreebsdRelease::V16;
+                            }
+                            FreebsdRelease::V16 => {
+                                self.freebsd_release = FreebsdRelease::V14;
+                            }
+                        },
                         _ => {}
                     },
                     KeyCode::Left | KeyCode::Char('h') => match self.os {
@@ -249,6 +273,17 @@ impl Quick {
                             }
                             UbuntuRelease::Jammy => {
                                 self.ubuntu_release = UbuntuRelease::Noble;
+                            }
+                        },
+                        Os::Freebsd(_) => match self.freebsd_release {
+                            FreebsdRelease::V14 => {
+                                self.freebsd_release = FreebsdRelease::V16;
+                            }
+                            FreebsdRelease::V15 => {
+                                self.freebsd_release = FreebsdRelease::V14;
+                            }
+                            FreebsdRelease::V16 => {
+                                self.freebsd_release = FreebsdRelease::V15;
                             }
                         },
                         _ => {}
@@ -495,6 +530,9 @@ impl Quick {
                             self.debian_release, self.debian_release as u8,
                         )
                     }
+                    Os::Freebsd(_) => {
+                        format!("< {} >", self.freebsd_release,)
+                    }
                     _ => "-".to_string(),
                 }
             }),
@@ -544,7 +582,7 @@ impl Quick {
                 Span::from(" ".repeat(6)),
                 Span::from({
                     let original_length = self.memory.field.to_string().len();
-                    let target_length = 65_usize;
+                    let target_length = 62_usize;
 
                     self.memory
                         .field

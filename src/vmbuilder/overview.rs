@@ -13,7 +13,7 @@ use tui_input::{Input, backend::crossterm::EventHandler};
 
 use crate::{
     BootOption,
-    os::{Os, debian::DebianRelease, ubuntu::UbuntuRelease},
+    os::{Os, debian::DebianRelease, freebsd::FreebsdRelease, ubuntu::UbuntuRelease},
     storage::{self, Interface},
 };
 
@@ -46,6 +46,7 @@ pub struct Overview {
     os: Os,
     ubuntu_release: UbuntuRelease,
     debian_release: DebianRelease,
+    freebsd_release: FreebsdRelease,
 }
 
 impl Overview {
@@ -86,6 +87,7 @@ impl Overview {
                 Os::Debian(_) => Some(Os::Debian(self.debian_release)),
                 Os::Ubuntu(_) => Some(Os::Ubuntu(self.ubuntu_release)),
                 Os::ArchLinux => Some(Os::ArchLinux),
+                Os::Freebsd(_) => Some(Os::Freebsd(self.freebsd_release)),
             },
             BootOption::LocalFile => None,
         }
@@ -166,7 +168,7 @@ impl Overview {
                 KeyCode::Down | KeyCode::Char('j') => {
                     self.section = Section::Release;
                 }
-                KeyCode::Left | KeyCode::Char('h') => match self.os {
+                KeyCode::Right | KeyCode::Char('l') => match self.os {
                     Os::Debian(_) => {
                         self.os = Os::Ubuntu(UbuntuRelease::default());
                     }
@@ -174,18 +176,24 @@ impl Overview {
                         self.os = Os::ArchLinux;
                     }
                     Os::ArchLinux => {
+                        self.os = Os::Freebsd(FreebsdRelease::default());
+                    }
+                    Os::Freebsd(_) => {
                         self.os = Os::Debian(DebianRelease::default());
                     }
                 },
-                KeyCode::Right | KeyCode::Char('l') => match self.os {
+                KeyCode::Left | KeyCode::Char('h') => match self.os {
                     Os::Debian(_) => {
-                        self.os = Os::ArchLinux;
+                        self.os = Os::Freebsd(FreebsdRelease::default());
                     }
                     Os::Ubuntu(_) => {
-                        self.os = Os::Debian(DebianRelease::default());
+                        self.os = Os::ArchLinux;
                     }
                     Os::ArchLinux => {
                         self.os = Os::Ubuntu(UbuntuRelease::default());
+                    }
+                    Os::Freebsd(_) => {
+                        self.os = Os::ArchLinux;
                     }
                 },
                 _ => {}
@@ -221,6 +229,17 @@ impl Overview {
                             self.ubuntu_release = UbuntuRelease::Resolute;
                         }
                     },
+                    Os::Freebsd(_) => match self.freebsd_release {
+                        FreebsdRelease::V14 => {
+                            self.freebsd_release = FreebsdRelease::V15;
+                        }
+                        FreebsdRelease::V15 => {
+                            self.freebsd_release = FreebsdRelease::V16;
+                        }
+                        FreebsdRelease::V16 => {
+                            self.freebsd_release = FreebsdRelease::V14;
+                        }
+                    },
                 },
                 KeyCode::Left | KeyCode::Char('h') => match self.os {
                     Os::ArchLinux => {}
@@ -244,6 +263,17 @@ impl Overview {
                         }
                         UbuntuRelease::Jammy => {
                             self.ubuntu_release = UbuntuRelease::Noble;
+                        }
+                    },
+                    Os::Freebsd(_) => match self.freebsd_release {
+                        FreebsdRelease::V14 => {
+                            self.freebsd_release = FreebsdRelease::V16;
+                        }
+                        FreebsdRelease::V15 => {
+                            self.freebsd_release = FreebsdRelease::V14;
+                        }
+                        FreebsdRelease::V16 => {
+                            self.freebsd_release = FreebsdRelease::V15;
                         }
                     },
                 },
@@ -453,6 +483,9 @@ impl Overview {
                             "< {} - {} >",
                             self.debian_release, self.debian_release as u8,
                         )
+                    }
+                    Os::Freebsd(_) => {
+                        format!("< {} >", self.freebsd_release,)
                     }
                     Os::ArchLinux => "-".to_string(),
                 }
