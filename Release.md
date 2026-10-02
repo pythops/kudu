@@ -1,3 +1,8 @@
+## v0.4.1 - 2026-10-02
+
+- Display the release version in the VM information
+- Add support for FreeBSD cloud images
+
 ## v0.4.0 - 2026-09-23
 
 - Add graphics config with different drivers
