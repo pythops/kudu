@@ -841,7 +841,7 @@ impl VM {
                         Span::from("Networks").bold().fg(Color::Yellow),
                         Span::from(" ".repeat(9)),
                         Span::from(format!("{:12}", "id")).bold(),
-                        Span::from(format!("{:12}", "Backend")).bold(),
+                        Span::from(format!("{:20}", "Backend")).bold(),
                         Span::from(format!("{:18}", "Nic")).bold(),
                         Span::from(format!("{:17}", "Mac")).bold(),
                     ]));
@@ -850,7 +850,7 @@ impl VM {
                         lines.push(Line::from(vec![
                             Span::from(" ".repeat(17)),
                             Span::from(format!("{:<12}", network.id)),
-                            Span::from(format!("{:<12}", network.backend)),
+                            Span::from(format!("{:<20}", network.backend.to_string())),
                             Span::from(format!("{:<18}", network.nic)),
                             Span::from(format!(
                                 "{:<17}",

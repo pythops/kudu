@@ -2,6 +2,9 @@ pub mod bridge;
 pub mod builder;
 pub mod port_forwarding;
 
+use std::{fmt::Display, path::PathBuf};
+
+use rustix::path::Arg;
 use serde::{Deserialize, Serialize};
 
 use port_forwarding::PortMapping;
@@ -29,14 +32,36 @@ pub enum Nic {
 }
 
 #[non_exhaustive]
-#[derive(Debug, Clone, Default, PartialEq, strum::Display, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 pub enum NetworkBackend {
     #[default]
     Slirp,
     Passt,
     Tap,
-    #[strum(to_string = "Bridge({0})")]
     Bridge(String),
+    Vde(PathBuf),
+}
+
+impl Display for NetworkBackend {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NetworkBackend::Slirp => {
+                write!(f, "Slirp")
+            }
+            NetworkBackend::Passt => {
+                write!(f, "Passt")
+            }
+            NetworkBackend::Tap => {
+                write!(f, "Tap")
+            }
+            NetworkBackend::Bridge(interface) => {
+                write!(f, "Bridge({})", interface)
+            }
+            NetworkBackend::Vde(socket) => {
+                write!(f, "Vde({})", socket.display())
+            }
+        }
+    }
 }
 
 impl Default for Network {
@@ -139,6 +164,11 @@ impl Network {
             }
             NetworkBackend::Bridge(br) => {
                 let netdev = ["-netdev".to_string(), format!("bridge,br={br},id={id}")];
+                [&device[..], &netdev[..]].concat()
+            }
+            NetworkBackend::Vde(socket) => {
+                let sock = socket.to_string_lossy().to_string();
+                let netdev = ["-netdev".to_string(), format!("vde,sock={sock},id={id}")];
                 [&device[..], &netdev[..]].concat()
             }
         }

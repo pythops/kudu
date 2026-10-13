@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
 use crossterm::event::{KeyCode, KeyEvent};
 use rand::RngExt;
@@ -216,19 +216,37 @@ struct UserInputField {
     field: Input,
     error: Option<String>,
 }
+impl UserInputField {
+    fn clear(&mut self) {
+        self.field = Input::default();
+        self.error = None;
+    }
+}
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub enum Section {
     #[default]
     Backend,
+    Socket,
     Nic,
     Mac,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Default, strum::Display)]
+enum NetworkBackendName {
+    #[default]
+    Slirp,
+    Passt,
+    Tap,
+    Bridge,
+    Vde,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct NewNetwork {
     section: Section,
-    backend: NetworkBackend,
+    backend: NetworkBackendName,
+    socket: UserInputField,
     nic: Nic,
     mac: UserInputField,
 }
@@ -257,15 +275,28 @@ impl NewNetwork {
 
     pub fn build(&self) -> Network {
         match self.backend {
-            NetworkBackend::Tap | NetworkBackend::Bridge(_) if self.mac().is_none() => {
-                Network::new(
-                    self.backend.clone(),
-                    self.nic,
-                    Vec::new(),
-                    Some(random_mac()),
-                )
+            NetworkBackendName::Bridge => Network::new(
+                NetworkBackend::Bridge(KUDU_BRIDGE_INTERFACE.into()),
+                self.nic,
+                Vec::new(),
+                Some(self.mac().unwrap_or(random_mac())),
+            ),
+            NetworkBackendName::Tap => Network::new(
+                NetworkBackend::Tap,
+                self.nic,
+                Vec::new(),
+                Some(self.mac().unwrap_or(random_mac())),
+            ),
+            NetworkBackendName::Slirp => {
+                Network::new(NetworkBackend::Slirp, self.nic, Vec::new(), self.mac())
             }
-            _ => Network::new(self.backend.clone(), self.nic, Vec::new(), self.mac()),
+            NetworkBackendName::Passt => {
+                Network::new(NetworkBackend::Passt, self.nic, Vec::new(), self.mac())
+            }
+            NetworkBackendName::Vde => {
+                let backend = NetworkBackend::Vde(PathBuf::from(self.socket.field.value()));
+                Network::new(backend, self.nic, Vec::new(), self.mac())
+            }
         }
     }
 
@@ -290,10 +321,21 @@ impl NewNetwork {
                     }
                 }
             }
+            if !valid {
+                self.mac.error = Some("Unvalid MAC address".into());
+            }
         }
 
-        if !valid {
-            self.mac.error = Some("Unvalid MAC address".into());
+        if self.backend == NetworkBackendName::Vde {
+            if self.socket.field.value().is_empty() {
+                self.socket.error = Some("Field required.".into());
+                valid = false;
+            } else {
+                if !PathBuf::from(self.socket.field.value()).exists() {
+                    self.socket.error = Some("Unvalid path".into());
+                    valid = false;
+                }
+            }
         }
 
         valid
@@ -302,56 +344,83 @@ impl NewNetwork {
     pub fn handle_key_events(&mut self, key_event: KeyEvent) {
         match key_event.code {
             KeyCode::Down | KeyCode::Char('j') | KeyCode::Tab => match self.section {
-                Section::Backend => self.section = Section::Nic,
+                Section::Backend => {
+                    if self.backend == NetworkBackendName::Vde {
+                        self.section = Section::Socket;
+                    } else {
+                        self.section = Section::Nic;
+                    }
+                }
+                Section::Socket => self.section = Section::Nic,
                 Section::Nic => self.section = Section::Mac,
                 Section::Mac => self.section = Section::Backend,
             },
             KeyCode::Up | KeyCode::Char('k') | KeyCode::BackTab => match self.section {
                 Section::Backend => self.section = Section::Mac,
-                Section::Nic => self.section = Section::Backend,
+                Section::Socket => self.section = Section::Backend,
+                Section::Nic => {
+                    if self.backend == NetworkBackendName::Vde {
+                        self.section = Section::Socket;
+                    } else {
+                        self.section = Section::Backend;
+                    }
+                }
                 Section::Mac => self.section = Section::Nic,
             },
 
             _ => match self.section {
                 Section::Backend => match key_event.code {
                     KeyCode::Right | KeyCode::Char('l') => match self.backend {
-                        NetworkBackend::Passt => {
-                            self.backend = NetworkBackend::Slirp;
+                        NetworkBackendName::Slirp => {
+                            self.backend = NetworkBackendName::Passt;
                         }
-                        NetworkBackend::Slirp => {
+                        NetworkBackendName::Passt => {
                             if unsafe { USER_UID == 0 } {
-                                self.backend = NetworkBackend::Tap;
+                                self.backend = NetworkBackendName::Tap;
                             } else {
-                                self.backend = NetworkBackend::Passt;
+                                self.backend = NetworkBackendName::Vde;
+                                self.socket.clear();
                             }
                         }
-                        NetworkBackend::Tap => {
-                            self.backend = NetworkBackend::Bridge(KUDU_BRIDGE_INTERFACE.into());
+                        NetworkBackendName::Tap => {
+                            self.backend = NetworkBackendName::Bridge;
                         }
-                        NetworkBackend::Bridge(_) => {
-                            self.backend = NetworkBackend::Passt;
+                        NetworkBackendName::Bridge => {
+                            self.backend = NetworkBackendName::Passt;
+                        }
+                        NetworkBackendName::Vde => {
+                            self.backend = NetworkBackendName::Slirp;
                         }
                     },
                     KeyCode::Left | KeyCode::Char('h') => match self.backend {
-                        NetworkBackend::Passt => {
+                        NetworkBackendName::Slirp => {
+                            self.backend = NetworkBackendName::Vde;
+                            self.socket.clear();
+                        }
+                        NetworkBackendName::Passt => {
+                            self.backend = NetworkBackendName::Slirp;
+                        }
+                        NetworkBackendName::Tap => {
+                            self.backend = NetworkBackendName::Passt;
+                        }
+                        NetworkBackendName::Bridge => {
+                            self.backend = NetworkBackendName::Tap;
+                        }
+                        NetworkBackendName::Vde => {
                             if unsafe { USER_UID == 0 } {
-                                self.backend = NetworkBackend::Bridge(KUDU_BRIDGE_INTERFACE.into());
+                                self.backend = NetworkBackendName::Bridge;
                             } else {
-                                self.backend = NetworkBackend::Slirp;
+                                self.backend = NetworkBackendName::Passt;
                             }
-                        }
-                        NetworkBackend::Slirp => {
-                            self.backend = NetworkBackend::Passt;
-                        }
-                        NetworkBackend::Tap => {
-                            self.backend = NetworkBackend::Slirp;
-                        }
-                        NetworkBackend::Bridge(_) => {
-                            self.backend = NetworkBackend::Tap;
                         }
                     },
                     _ => {}
                 },
+                Section::Socket => {
+                    self.socket
+                        .field
+                        .handle_event(&crossterm::event::Event::Key(key_event));
+                }
 
                 Section::Nic => match key_event.code {
                     KeyCode::Right | KeyCode::Char('l') => match self.nic {
@@ -392,7 +461,7 @@ impl NewNetwork {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(16),
+                Constraint::Length(14),
                 Constraint::Fill(1),
             ])
             .margin(1)
@@ -425,19 +494,23 @@ impl NewNetwork {
             vertical: 2,
         });
 
-        let (backend_block, nic_block, mac_block) = {
+        let (backend_block, socket_block, nic_block, mac_block) = {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
                     Constraint::Length(2),
+                    Constraint::Length(if self.backend == NetworkBackendName::Vde {
+                        3
+                    } else {
+                        0
+                    }),
                     Constraint::Length(2),
                     Constraint::Length(2),
                 ])
-                .margin(1)
-                .flex(ratatui::layout::Flex::SpaceBetween)
+                .flex(Flex::Center)
                 .split(area);
 
-            (chunks[0], chunks[1], chunks[2])
+            (chunks[0], chunks[1], chunks[2], chunks[3])
         };
 
         let backend = Line::from(vec![
@@ -451,6 +524,38 @@ impl NewNetwork {
             Span::from(" ".repeat(4)),
             Span::from(format!("< {} >", self.backend)),
         ]);
+
+        let socket = vec![
+            Line::from(vec![
+                {
+                    if self.section == Section::Socket {
+                        Span::from("> Socket ").bold()
+                    } else {
+                        Span::from("  Socket ")
+                    }
+                },
+                Span::from(" ".repeat(6)),
+                Span::from({
+                    let original_length = self.socket.field.to_string().len();
+                    let target_length = 30_usize;
+
+                    self.socket
+                        .field
+                        .to_string()
+                        .chars()
+                        .chain(std::iter::repeat_n(
+                            ' ',
+                            target_length.saturating_sub(original_length),
+                        ))
+                        .collect::<String>()
+                })
+                .on_dark_gray(),
+            ]),
+            Line::from(vec![
+                Span::from(" ".repeat(15)),
+                Span::from(self.socket.clone().error.unwrap_or("".to_string())).red(),
+            ]),
+        ];
 
         let nic = Line::from(vec![
             {
@@ -497,13 +602,28 @@ impl NewNetwork {
         ];
 
         frame.render_widget(Text::from(backend), backend_block);
+        frame.render_widget(Text::from(socket), socket_block);
         frame.render_widget(Text::from(nic), nic_block);
         frame.render_widget(Text::from(mac), mac_block);
 
-        if self.section == Section::Mac && self.mac.field.visual_cursor() < 40 {
-            let x = area.x + self.mac.field.visual_cursor() as u16 + 16;
-            let y = area.y + 7;
-            frame.set_cursor_position((x, y));
+        match self.section {
+            Section::Socket if self.socket.field.visual_cursor() < 40 => {
+                let x = area.x + self.socket.field.visual_cursor() as u16 + 15;
+                let y = area.y + 2;
+                frame.set_cursor_position((x, y));
+            }
+            Section::Mac if self.mac.field.visual_cursor() < 40 => {
+                if self.backend == NetworkBackendName::Vde {
+                    let x = area.x + self.mac.field.visual_cursor() as u16 + 15;
+                    let y = area.y + 6;
+                    frame.set_cursor_position((x, y));
+                } else {
+                    let x = area.x + self.mac.field.visual_cursor() as u16 + 15;
+                    let y = area.y + 5;
+                    frame.set_cursor_position((x, y));
+                }
+            }
+            _ => {}
         }
     }
 }
