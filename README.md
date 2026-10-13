@@ -21,6 +21,7 @@
 - `xorriso` for cloudinit
 - `passt`
 - `xz`
+- `vde` if you want to use [vde network backend](https://github.com/virtualsquare/vde-2)
 - uefi firmware package (Optional for x86_64)
 
   |             | Debian/Ubuntu    | Arch (btw)   | Fedora       |
