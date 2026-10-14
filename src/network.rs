@@ -39,7 +39,7 @@ pub enum NetworkBackend {
     Passt,
     Tap,
     Bridge(String),
-    Vde(PathBuf),
+    Vde((PathBuf, Option<u16>)),
 }
 
 impl Display for NetworkBackend {
@@ -57,8 +57,13 @@ impl Display for NetworkBackend {
             NetworkBackend::Bridge(interface) => {
                 write!(f, "Bridge({})", interface)
             }
-            NetworkBackend::Vde(socket) => {
-                write!(f, "Vde({})", socket.display())
+            NetworkBackend::Vde((socket, port)) => {
+                let port = if let Some(port) = port {
+                    port.to_string()
+                } else {
+                    "Auto".to_string()
+                };
+                write!(f, "Vde({}/{port})", socket.display())
             }
         }
     }
@@ -166,9 +171,18 @@ impl Network {
                 let netdev = ["-netdev".to_string(), format!("bridge,br={br},id={id}")];
                 [&device[..], &netdev[..]].concat()
             }
-            NetworkBackend::Vde(socket) => {
+            NetworkBackend::Vde((socket, port)) => {
                 let sock = socket.to_string_lossy().to_string();
-                let netdev = ["-netdev".to_string(), format!("vde,sock={sock},id={id}")];
+
+                let netdev = if let Some(port) = port {
+                    [
+                        "-netdev".to_string(),
+                        format!("vde,sock={sock},port={port},id={id}"),
+                    ]
+                } else {
+                    ["-netdev".to_string(), format!("vde,sock={sock},id={id}")]
+                };
+
                 [&device[..], &netdev[..]].concat()
             }
         }

@@ -228,6 +228,7 @@ pub enum Section {
     #[default]
     Backend,
     Socket,
+    Port,
     Nic,
     Mac,
 }
@@ -247,6 +248,7 @@ pub struct NewNetwork {
     section: Section,
     backend: NetworkBackendName,
     socket: UserInputField,
+    port: UserInputField,
     nic: Nic,
     mac: UserInputField,
 }
@@ -294,7 +296,13 @@ impl NewNetwork {
                 Network::new(NetworkBackend::Passt, self.nic, Vec::new(), self.mac())
             }
             NetworkBackendName::Vde => {
-                let backend = NetworkBackend::Vde(PathBuf::from(self.socket.field.value()));
+                let port = if self.port.field.value().is_empty() {
+                    None
+                } else {
+                    Some(self.port.field.value().parse::<u16>().unwrap())
+                };
+                let socket = PathBuf::from(self.socket.field.value());
+                let backend = NetworkBackend::Vde((socket, port));
                 Network::new(backend, self.nic, Vec::new(), self.mac())
             }
         }
@@ -336,6 +344,13 @@ impl NewNetwork {
                     valid = false;
                 }
             }
+
+            if !self.port.field.value().is_empty()
+                && self.port.field.value().parse::<u16>().is_err()
+            {
+                self.port.error = Some("Unvalid port".into());
+                valid = false;
+            }
         }
 
         valid
@@ -351,16 +366,18 @@ impl NewNetwork {
                         self.section = Section::Nic;
                     }
                 }
-                Section::Socket => self.section = Section::Nic,
+                Section::Socket => self.section = Section::Port,
+                Section::Port => self.section = Section::Nic,
                 Section::Nic => self.section = Section::Mac,
                 Section::Mac => self.section = Section::Backend,
             },
             KeyCode::Up | KeyCode::Char('k') | KeyCode::BackTab => match self.section {
                 Section::Backend => self.section = Section::Mac,
                 Section::Socket => self.section = Section::Backend,
+                Section::Port => self.section = Section::Socket,
                 Section::Nic => {
                     if self.backend == NetworkBackendName::Vde {
-                        self.section = Section::Socket;
+                        self.section = Section::Port;
                     } else {
                         self.section = Section::Backend;
                     }
@@ -380,6 +397,7 @@ impl NewNetwork {
                             } else {
                                 self.backend = NetworkBackendName::Vde;
                                 self.socket.clear();
+                                self.port.clear();
                             }
                         }
                         NetworkBackendName::Tap => {
@@ -396,6 +414,7 @@ impl NewNetwork {
                         NetworkBackendName::Slirp => {
                             self.backend = NetworkBackendName::Vde;
                             self.socket.clear();
+                            self.port.clear();
                         }
                         NetworkBackendName::Passt => {
                             self.backend = NetworkBackendName::Slirp;
@@ -418,6 +437,11 @@ impl NewNetwork {
                 },
                 Section::Socket => {
                     self.socket
+                        .field
+                        .handle_event(&crossterm::event::Event::Key(key_event));
+                }
+                Section::Port => {
+                    self.port
                         .field
                         .handle_event(&crossterm::event::Event::Key(key_event));
                 }
@@ -461,7 +485,7 @@ impl NewNetwork {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(14),
+                Constraint::Length(17),
                 Constraint::Fill(1),
             ])
             .margin(1)
@@ -494,11 +518,16 @@ impl NewNetwork {
             vertical: 2,
         });
 
-        let (backend_block, socket_block, nic_block, mac_block) = {
+        let (backend_block, socket_block, port_block, nic_block, mac_block) = {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
                     Constraint::Length(2),
+                    Constraint::Length(if self.backend == NetworkBackendName::Vde {
+                        3
+                    } else {
+                        0
+                    }),
                     Constraint::Length(if self.backend == NetworkBackendName::Vde {
                         3
                     } else {
@@ -510,7 +539,7 @@ impl NewNetwork {
                 .flex(Flex::Center)
                 .split(area);
 
-            (chunks[0], chunks[1], chunks[2], chunks[3])
+            (chunks[0], chunks[1], chunks[2], chunks[3], chunks[4])
         };
 
         let backend = Line::from(vec![
@@ -554,6 +583,38 @@ impl NewNetwork {
             Line::from(vec![
                 Span::from(" ".repeat(15)),
                 Span::from(self.socket.clone().error.unwrap_or("".to_string())).red(),
+            ]),
+        ];
+
+        let port = vec![
+            Line::from(vec![
+                {
+                    if self.section == Section::Port {
+                        Span::from("> Port ").bold()
+                    } else {
+                        Span::from("  Port ")
+                    }
+                },
+                Span::from(" ".repeat(8)),
+                Span::from({
+                    let original_length = self.port.field.to_string().len();
+                    let target_length = 30_usize;
+
+                    self.port
+                        .field
+                        .to_string()
+                        .chars()
+                        .chain(std::iter::repeat_n(
+                            ' ',
+                            target_length.saturating_sub(original_length),
+                        ))
+                        .collect::<String>()
+                })
+                .on_dark_gray(),
+            ]),
+            Line::from(vec![
+                Span::from(" ".repeat(15)),
+                Span::from(self.port.clone().error.unwrap_or("".to_string())).red(),
             ]),
         ];
 
@@ -603,6 +664,7 @@ impl NewNetwork {
 
         frame.render_widget(Text::from(backend), backend_block);
         frame.render_widget(Text::from(socket), socket_block);
+        frame.render_widget(Text::from(port), port_block);
         frame.render_widget(Text::from(nic), nic_block);
         frame.render_widget(Text::from(mac), mac_block);
 
@@ -612,14 +674,19 @@ impl NewNetwork {
                 let y = area.y + 2;
                 frame.set_cursor_position((x, y));
             }
+            Section::Port if self.port.field.visual_cursor() < 40 => {
+                let x = area.x + self.port.field.visual_cursor() as u16 + 15;
+                let y = area.y + 5;
+                frame.set_cursor_position((x, y));
+            }
             Section::Mac if self.mac.field.visual_cursor() < 40 => {
                 if self.backend == NetworkBackendName::Vde {
                     let x = area.x + self.mac.field.visual_cursor() as u16 + 15;
-                    let y = area.y + 6;
+                    let y = area.y + 9;
                     frame.set_cursor_position((x, y));
                 } else {
                     let x = area.x + self.mac.field.visual_cursor() as u16 + 15;
-                    let y = area.y + 5;
+                    let y = area.y + 7;
                     frame.set_cursor_position((x, y));
                 }
             }
