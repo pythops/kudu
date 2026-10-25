@@ -12,7 +12,7 @@ use std::{
 };
 
 use crate::{
-    Arch, KVM_ENABLED,
+    Arch, BootOption, KVM_ENABLED,
     event::Event,
     vm::{VM, VmId},
 };
@@ -107,6 +107,16 @@ impl Qemu {
 
         for drive in &vm.drives {
             command.arg("-drive").arg(drive.to_qemu_arg());
+        }
+
+        if let BootOption::DirectLinuxBoot((kernel, intiramfs, append)) = &vm.boot_option {
+            command
+                .arg("-kernel")
+                .arg(kernel)
+                .arg("-initrd")
+                .arg(intiramfs)
+                .arg("-append")
+                .arg(append);
         }
 
         command.stdout(Stdio::null());
