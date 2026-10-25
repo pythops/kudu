@@ -2,6 +2,8 @@ use std::{env, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::{BootOption::CloudImage, os::Os};
+
 pub mod access;
 pub mod app;
 pub mod cloudinit;
@@ -66,9 +68,15 @@ impl TryFrom<&str> for Arch {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum BootOption {
-    #[default]
-    CloudImage,
+    CloudImage(Os),
     LocalFile,
+    DirectLinuxBoot((PathBuf, PathBuf, String)),
+}
+
+impl Default for BootOption {
+    fn default() -> Self {
+        CloudImage(Os::default())
+    }
 }

@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Margin, Rect},
     style::Stylize,
     text::{Line, Span, Text},
     widgets::ListItem,
@@ -26,6 +26,9 @@ enum Section {
     StorageInterface,
     OS,
     Release,
+    Kernel,
+    Initramfs,
+    AppendOptions,
     Cloudinit,
 }
 
@@ -35,11 +38,19 @@ pub struct UserInputField {
     error: Option<String>,
 }
 
+#[derive(Debug, Default, Clone, PartialEq)]
+enum BootOptionChoice {
+    #[default]
+    CloudImage,
+    LocalFile,
+    DirectLinuxBoot,
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct Overview {
     section: Section,
     name: UserInputField,
-    boot_option: BootOption,
+    boot_option_choice: BootOptionChoice,
     cloudinit: UserInputField,
     boot_file: UserInputField,
     local_file_interface: storage::Interface,
@@ -47,6 +58,9 @@ pub struct Overview {
     ubuntu_release: UbuntuRelease,
     debian_release: DebianRelease,
     freebsd_release: FreebsdRelease,
+    kernel: UserInputField,
+    initramfs: UserInputField,
+    appendoptions: UserInputField,
 }
 
 impl Overview {
@@ -54,9 +68,16 @@ impl Overview {
         Overview::default()
     }
 
-    //TODO: maybe a bool is enough
     pub fn boot_option(&self) -> BootOption {
-        self.boot_option
+        match self.boot_option_choice {
+            BootOptionChoice::CloudImage => BootOption::CloudImage(self.os()),
+            BootOptionChoice::LocalFile => BootOption::LocalFile,
+            BootOptionChoice::DirectLinuxBoot => BootOption::DirectLinuxBoot((
+                self.kernel.field.value().into(),
+                self.initramfs.field.value().into(),
+                self.appendoptions.field.value().into(),
+            )),
+        }
     }
 
     pub fn name(&self) -> String {
@@ -81,15 +102,12 @@ impl Overview {
         }
     }
 
-    pub fn os(&self) -> Option<Os> {
-        match self.boot_option {
-            BootOption::CloudImage => match self.os {
-                Os::Debian(_) => Some(Os::Debian(self.debian_release)),
-                Os::Ubuntu(_) => Some(Os::Ubuntu(self.ubuntu_release)),
-                Os::ArchLinux => Some(Os::ArchLinux),
-                Os::Freebsd(_) => Some(Os::Freebsd(self.freebsd_release)),
-            },
-            BootOption::LocalFile => None,
+    pub fn os(&self) -> Os {
+        match self.os {
+            Os::Debian(_) => Os::Debian(self.debian_release),
+            Os::Ubuntu(_) => Os::Ubuntu(self.ubuntu_release),
+            Os::ArchLinux => Os::ArchLinux,
+            Os::Freebsd(_) => Os::Freebsd(self.freebsd_release),
         }
     }
 
@@ -112,24 +130,39 @@ impl Overview {
                 KeyCode::Up | KeyCode::Char('k') => {
                     self.section = Section::Name;
                 }
-                KeyCode::Down | KeyCode::Char('j') => match self.boot_option {
-                    BootOption::CloudImage => {
+                KeyCode::Down | KeyCode::Char('j') => match self.boot_option_choice {
+                    BootOptionChoice::CloudImage => {
                         self.section = Section::OS;
                     }
-                    BootOption::LocalFile => {
+                    BootOptionChoice::LocalFile => {
                         self.section = Section::LocalFile;
                     }
-                },
-                KeyCode::Left | KeyCode::Char('h') | KeyCode::Right | KeyCode::Char('l') => {
-                    match self.boot_option {
-                        BootOption::CloudImage => {
-                            self.boot_option = BootOption::LocalFile;
-                        }
-                        BootOption::LocalFile => {
-                            self.boot_option = BootOption::CloudImage;
-                        }
+                    BootOptionChoice::DirectLinuxBoot => {
+                        self.section = Section::Kernel;
                     }
-                }
+                },
+                KeyCode::Right | KeyCode::Char('l') => match self.boot_option_choice {
+                    BootOptionChoice::CloudImage => {
+                        self.boot_option_choice = BootOptionChoice::LocalFile;
+                    }
+                    BootOptionChoice::LocalFile => {
+                        self.boot_option_choice = BootOptionChoice::DirectLinuxBoot;
+                    }
+                    BootOptionChoice::DirectLinuxBoot => {
+                        self.boot_option_choice = BootOptionChoice::CloudImage;
+                    }
+                },
+                KeyCode::Left | KeyCode::Char('h') => match self.boot_option_choice {
+                    BootOptionChoice::CloudImage => {
+                        self.boot_option_choice = BootOptionChoice::DirectLinuxBoot;
+                    }
+                    BootOptionChoice::LocalFile => {
+                        self.boot_option_choice = BootOptionChoice::CloudImage;
+                    }
+                    BootOptionChoice::DirectLinuxBoot => {
+                        self.boot_option_choice = BootOptionChoice::LocalFile;
+                    }
+                },
                 _ => {}
             },
             Section::LocalFile => match key_event.code {
@@ -279,13 +312,55 @@ impl Overview {
                 },
                 _ => {}
             },
+            Section::Kernel => match key_event.code {
+                KeyCode::Up => {
+                    self.section = Section::BootOption;
+                }
+                KeyCode::Down => {
+                    self.section = Section::Initramfs;
+                }
+                _ => {
+                    self.kernel
+                        .field
+                        .handle_event(&crossterm::event::Event::Key(key_event));
+                }
+            },
+            Section::Initramfs => match key_event.code {
+                KeyCode::Up => {
+                    self.section = Section::Kernel;
+                }
+                KeyCode::Down => {
+                    self.section = Section::AppendOptions;
+                }
+                _ => {
+                    self.initramfs
+                        .field
+                        .handle_event(&crossterm::event::Event::Key(key_event));
+                }
+            },
+            Section::AppendOptions => match key_event.code {
+                KeyCode::Up => {
+                    self.section = Section::Initramfs;
+                }
+                KeyCode::Down => {
+                    self.section = Section::Cloudinit;
+                }
+                _ => {
+                    self.appendoptions
+                        .field
+                        .handle_event(&crossterm::event::Event::Key(key_event));
+                }
+            },
             Section::Cloudinit => match key_event.code {
-                KeyCode::Up => match self.boot_option {
-                    BootOption::CloudImage => {
+                KeyCode::Up => match self.boot_option_choice {
+                    BootOptionChoice::CloudImage => {
                         self.section = Section::Release;
                     }
-                    BootOption::LocalFile => {
+                    BootOptionChoice::LocalFile => {
                         self.section = Section::StorageInterface;
+                    }
+                    BootOptionChoice::DirectLinuxBoot => {
+                        self.section = Section::AppendOptions;
                     }
                 },
                 KeyCode::Down => {
@@ -300,12 +375,16 @@ impl Overview {
         }
     }
 
+    //TODO: add validate by field
     pub fn validate(&mut self) -> bool {
         let mut valid = true;
 
         self.name.error = None;
         self.cloudinit.error = None;
         self.boot_file.error = None;
+        self.kernel.error = None;
+        self.initramfs.error = None;
+        self.appendoptions.error = None;
 
         if self.name.field.value().is_empty() {
             self.name.error = Some("Field required".into());
@@ -319,16 +398,42 @@ impl Overview {
             valid = false;
         }
 
-        if self.boot_option == BootOption::LocalFile {
-            if self.boot_file.field.value().is_empty() {
-                self.boot_file.error = Some("Field required".into());
-                return false;
-            }
+        match self.boot_option_choice {
+            BootOptionChoice::LocalFile => {
+                if self.boot_file.field.value().is_empty() {
+                    self.boot_file.error = Some("Field required".into());
+                    return false;
+                }
 
-            if !PathBuf::from(self.boot_file.field.value()).exists() {
-                self.boot_file.error = Some("Boot file does not exists".into());
-                valid = false;
+                if !PathBuf::from(self.boot_file.field.value()).exists() {
+                    self.boot_file.error = Some("Boot file does not exists".into());
+                    valid = false;
+                }
             }
+            BootOptionChoice::DirectLinuxBoot => {
+                let kernel = self.kernel.field.value();
+                let initramfs = self.initramfs.field.value();
+
+                if kernel.is_empty() {
+                    self.kernel.error = Some("Field required".into());
+                    valid = false;
+                } else {
+                    if !PathBuf::from(kernel).exists() {
+                        self.kernel.error = Some("Unvalid path".into());
+                        valid = false;
+                    }
+                }
+                if initramfs.is_empty() {
+                    self.initramfs.error = Some("Field required".into());
+                    valid = false;
+                } else {
+                    if !PathBuf::from(initramfs).exists() {
+                        self.initramfs.error = Some("Unvalid path".into());
+                        valid = false;
+                    }
+                }
+            }
+            _ => {}
         }
 
         valid
@@ -344,8 +449,8 @@ impl Overview {
             Line::from(""),
         ])];
 
-        match self.boot_option {
-            BootOption::CloudImage => {
+        match self.boot_option_choice {
+            BootOptionChoice::CloudImage => {
                 items.push(ListItem::from(vec![
                     Line::from(vec![
                         Span::from("OS").bold(),
@@ -355,7 +460,7 @@ impl Overview {
                     Line::from(""),
                 ]));
             }
-            BootOption::LocalFile => {
+            BootOptionChoice::LocalFile => {
                 items.push(ListItem::from(vec![
                     Line::from(vec![
                         Span::from("Boot file").bold(),
@@ -364,6 +469,9 @@ impl Overview {
                     ]),
                     Line::from(""),
                 ]));
+            }
+            BootOptionChoice::DirectLinuxBoot => {
+                //TODO:
             }
         };
 
@@ -384,20 +492,81 @@ impl Overview {
     }
 
     pub fn render(&self, frame: &mut Frame, area: Rect, cancel_confirmation_popup: bool) {
-        let (name_block, boot_block, os_block, release_block, cloudinit_block) = {
+        let area = area.inner(Margin {
+            horizontal: 0,
+            vertical: 1,
+        });
+
+        let (
+            name_block,
+            boot_block,
+            os_block,
+            release_block,
+            file_path_block,
+            storage_interface_block,
+            kernel_block,
+            initramfs_block,
+            append_options_block,
+            cloudinit_block,
+        ) = {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(4),
-                    Constraint::Length(4),
-                    Constraint::Length(4),
-                    Constraint::Length(4),
-                    Constraint::Length(4),
+                    Constraint::Length(4), // Name
+                    Constraint::Length(4), // Boot Option
+                    Constraint::Length(
+                        if self.boot_option_choice == BootOptionChoice::CloudImage {
+                            4
+                        } else {
+                            0
+                        },
+                    ), // os
+                    Constraint::Length(
+                        if self.boot_option_choice == BootOptionChoice::CloudImage {
+                            4
+                        } else {
+                            0
+                        },
+                    ), // release
+                    Constraint::Length(if self.boot_option_choice == BootOptionChoice::LocalFile {
+                        4
+                    } else {
+                        0
+                    }), // File
+                    Constraint::Length(if self.boot_option_choice == BootOptionChoice::LocalFile {
+                        4
+                    } else {
+                        0
+                    }), // Interface
+                    Constraint::Length(
+                        if self.boot_option_choice == BootOptionChoice::DirectLinuxBoot {
+                            4
+                        } else {
+                            0
+                        },
+                    ), // Kernel
+                    Constraint::Length(
+                        if self.boot_option_choice == BootOptionChoice::DirectLinuxBoot {
+                            4
+                        } else {
+                            0
+                        },
+                    ), // Initramfs
+                    Constraint::Length(
+                        if self.boot_option_choice == BootOptionChoice::DirectLinuxBoot {
+                            4
+                        } else {
+                            0
+                        },
+                    ), // Append
+                    Constraint::Length(4), // Cloudinit
                 ])
-                .margin(1)
                 .split(area);
 
-            (chunks[0], chunks[1], chunks[2], chunks[3], chunks[4])
+            (
+                chunks[0], chunks[1], chunks[2], chunks[3], chunks[4], chunks[5], chunks[6],
+                chunks[7], chunks[8], chunks[9],
+            )
         };
 
         let name = vec![
@@ -442,10 +611,16 @@ impl Overview {
             },
             Span::from(" ".repeat(5)),
             Span::from({
-                if self.boot_option == BootOption::CloudImage {
-                    "[x] CloudImage        [ ] Local File"
-                } else {
-                    "[ ] CloudImage        [x] Local File"
+                match self.boot_option_choice {
+                    BootOptionChoice::CloudImage => {
+                        "[x] CloudImage          [ ] Local File          [ ] Direct Boot "
+                    }
+                    BootOptionChoice::LocalFile => {
+                        "[ ] CloudImage          [x] Local File          [ ] Direct Boot "
+                    }
+                    BootOptionChoice::DirectLinuxBoot => {
+                        "[ ] CloudImage          [ ] Local File          [x] Direct Boot "
+                    }
                 }
             }),
         ]);
@@ -537,6 +712,102 @@ impl Overview {
             Span::from(format!("< {} >", self.local_file_interface)),
         ]);
 
+        let kernel = vec![
+            Line::from(vec![
+                {
+                    if self.section == Section::Kernel {
+                        Span::from("> Kernel     ").bold()
+                    } else {
+                        Span::from("  Kernel     ")
+                    }
+                },
+                Span::from(" "),
+                Span::from({
+                    let original_length = self.kernel.field.to_string().len();
+                    let target_length = 65_usize;
+
+                    self.kernel
+                        .field
+                        .to_string()
+                        .chars()
+                        .chain(std::iter::repeat_n(
+                            ' ',
+                            target_length.saturating_sub(original_length),
+                        ))
+                        .collect::<String>()
+                })
+                .on_dark_gray(),
+            ]),
+            Line::from(vec![
+                Span::from(" ".repeat(14)),
+                Span::from(self.kernel.clone().error.unwrap_or("".to_string())).red(),
+            ]),
+        ];
+
+        let initramfs = vec![
+            Line::from(vec![
+                {
+                    if self.section == Section::Initramfs {
+                        Span::from("> Initramfs  ").bold()
+                    } else {
+                        Span::from("  Initramfs  ")
+                    }
+                },
+                Span::from(" "),
+                Span::from({
+                    let original_length = self.initramfs.field.to_string().len();
+                    let target_length = 65_usize;
+
+                    self.initramfs
+                        .field
+                        .to_string()
+                        .chars()
+                        .chain(std::iter::repeat_n(
+                            ' ',
+                            target_length.saturating_sub(original_length),
+                        ))
+                        .collect::<String>()
+                })
+                .on_dark_gray(),
+            ]),
+            Line::from(vec![
+                Span::from(" ".repeat(14)),
+                Span::from(self.initramfs.clone().error.unwrap_or("".to_string())).red(),
+            ]),
+        ];
+
+        let append_options = vec![
+            Line::from(vec![
+                {
+                    if self.section == Section::AppendOptions {
+                        Span::from("> Append     ").bold()
+                    } else {
+                        Span::from("  Append     ")
+                    }
+                },
+                Span::from(" "),
+                Span::from({
+                    let original_length = self.appendoptions.field.to_string().len();
+                    let target_length = 65_usize;
+
+                    self.appendoptions
+                        .field
+                        .to_string()
+                        .chars()
+                        .chain(std::iter::repeat_n(
+                            ' ',
+                            target_length.saturating_sub(original_length),
+                        ))
+                        .collect::<String>()
+                })
+                .on_dark_gray(),
+            ]),
+            Line::from(vec![
+                Span::from(" ".repeat(14)),
+                Span::from(self.appendoptions.clone().error.unwrap_or("".to_string())).red(),
+            ]),
+        ];
+
         let cloudinit = vec![
             Line::from(vec![
                 {
@@ -578,14 +849,19 @@ impl Overview {
 
         frame.render_widget(Text::from(name), name_block);
         frame.render_widget(Text::from(boot_option), boot_block);
-        match self.boot_option {
-            BootOption::CloudImage => {
+        match self.boot_option_choice {
+            BootOptionChoice::CloudImage => {
                 frame.render_widget(os, os_block);
                 frame.render_widget(release, release_block);
             }
-            BootOption::LocalFile => {
-                frame.render_widget(Text::from(boot_file), os_block);
-                frame.render_widget(Text::from(local_file_interface), release_block);
+            BootOptionChoice::LocalFile => {
+                frame.render_widget(Text::from(boot_file), file_path_block);
+                frame.render_widget(Text::from(local_file_interface), storage_interface_block);
+            }
+            BootOptionChoice::DirectLinuxBoot => {
+                frame.render_widget(Text::from(kernel), kernel_block);
+                frame.render_widget(Text::from(initramfs), initramfs_block);
+                frame.render_widget(Text::from(append_options), append_options_block);
             }
         }
         frame.render_widget(Text::from(cloudinit), cloudinit_block);
@@ -594,19 +870,40 @@ impl Overview {
         if !cancel_confirmation_popup {
             match self.section {
                 Section::Name if self.name.field.visual_cursor() < 61 => {
-                    let x = area.x + self.name.field.visual_cursor() as u16 + 15;
-                    let y = area.y + 1;
+                    let x = area.x + self.name.field.visual_cursor() as u16 + 14;
+                    let y = area.y;
                     frame.set_cursor_position((x, y));
                 }
                 Section::LocalFile if self.boot_file.field.visual_cursor() <= 61 => {
-                    let x = area.x + self.boot_file.field.visual_cursor() as u16 + 15;
-                    let y = area.y + 9;
+                    let x = area.x + self.boot_file.field.visual_cursor() as u16 + 14;
+                    let y = area.y + 8;
+                    frame.set_cursor_position((x, y));
+                }
+                Section::Kernel if self.kernel.field.visual_cursor() <= 61 => {
+                    let x = area.x + self.kernel.field.visual_cursor() as u16 + 14;
+                    let y = area.y + 8;
+                    frame.set_cursor_position((x, y));
+                }
+                Section::Initramfs if self.initramfs.field.visual_cursor() <= 61 => {
+                    let x = area.x + self.initramfs.field.visual_cursor() as u16 + 14;
+                    let y = area.y + 12;
+                    frame.set_cursor_position((x, y));
+                }
+                Section::AppendOptions if self.appendoptions.field.visual_cursor() <= 61 => {
+                    let x = area.x + self.appendoptions.field.visual_cursor() as u16 + 14;
+                    let y = area.y + 16;
                     frame.set_cursor_position((x, y));
                 }
                 Section::Cloudinit if self.cloudinit.field.visual_cursor() <= 61 => {
-                    let x = area.x + self.cloudinit.field.visual_cursor() as u16 + 15;
-                    let y = area.y + 17;
-                    frame.set_cursor_position((x, y));
+                    if self.boot_option_choice == BootOptionChoice::DirectLinuxBoot {
+                        let x = area.x + self.cloudinit.field.visual_cursor() as u16 + 14;
+                        let y = area.y + 20;
+                        frame.set_cursor_position((x, y));
+                    } else {
+                        let x = area.x + self.cloudinit.field.visual_cursor() as u16 + 14;
+                        let y = area.y + 16;
+                        frame.set_cursor_position((x, y));
+                    }
                 }
                 _ => {}
             }

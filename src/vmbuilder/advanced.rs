@@ -12,10 +12,10 @@ use ratatui::{
 };
 
 use crate::{
-    Arch,
+    Arch, BootOption,
     event::Event,
     graphics, network,
-    os::Os::ArchLinux,
+    os::Os::{self},
     vmbuilder::{VMBuildData, access, fs, hardware, overview, port, storage},
 };
 
@@ -77,7 +77,6 @@ impl Advanced {
             name: self.overview.name(),
             cloudinit: self.overview.cloudinit(),
             boot_file: self.overview.boot_file(),
-            os: self.overview.os(),
             vcpu: self.hardware.vcpu(),
             memory: self.hardware.memory(),
             arch: self.hardware.arch(),
@@ -163,9 +162,10 @@ impl Advanced {
             KeyCode::BackTab => match self.focused_section {
                 Section::Overview => {
                     if self.validate_overview_section() {
-                        if self.overview.os() == Some(ArchLinux) {
+                        if self.overview.boot_option() == BootOption::CloudImage(Os::ArchLinux) {
                             self.hardware.set_arch(Arch::X86_64);
                         }
+
                         self.focused_section = Section::Summary;
                     }
                 }
@@ -200,8 +200,11 @@ impl Advanced {
                     self.overview.handle_key_events(key_event);
                 }
                 Section::Hardware => {
-                    self.hardware
-                        .handle_key_events(key_event, self.overview.os());
+                    let os = match self.overview.boot_option() {
+                        BootOption::CloudImage(v) => Some(v),
+                        _ => None,
+                    };
+                    self.hardware.handle_key_events(key_event, os);
                 }
                 Section::Storage => {
                     self.storage

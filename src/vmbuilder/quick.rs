@@ -321,10 +321,9 @@ impl Quick {
         }));
 
         VMBuildData {
-            boot_option: BootOption::CloudImage,
+            boot_option: BootOption::CloudImage(self.os()),
             name: self.name(),
             boot_file: None,
-            os: Some(self.os()),
             vcpu: self.vcpu(),
             memory: self.memory(),
             arch: self.arch(),
