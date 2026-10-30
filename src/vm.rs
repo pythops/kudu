@@ -48,6 +48,13 @@ use crate::{
 
 pub type VmId = uuid::Uuid;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Firmware {
+    Bios,
+    Uefi,
+    None,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VM {
     pub id: VmId,
@@ -195,7 +202,8 @@ impl VM {
             path.pop();
         }
 
-        if data.enable_uefi
+        if let BootOption::LocalFile | BootOption::CloudImage(_) = data.boot_option
+            && data.firmware == Firmware::Uefi
             && let Ok((code, vars)) = firmware::get_uefi_file_path(data.arch)
         {
             path.push("uefi_vars.fd");

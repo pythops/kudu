@@ -114,9 +114,11 @@ impl Qemu {
                 .arg("-kernel")
                 .arg(kernel)
                 .arg("-initrd")
-                .arg(intiramfs)
-                .arg("-append")
-                .arg(append);
+                .arg(intiramfs);
+
+            if !append.is_empty() {
+                command.arg("-append").arg(append);
+            }
         }
 
         command.stdout(Stdio::null());

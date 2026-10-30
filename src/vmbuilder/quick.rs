@@ -11,6 +11,7 @@ use crate::{
     graphics::Graphics,
     network,
     os::{Os, debian::DebianRelease, freebsd::FreebsdRelease, ubuntu::UbuntuRelease},
+    vm::Firmware,
     vmbuilder::VMBuildData,
 };
 use crossterm::event::{KeyCode, KeyEvent};
@@ -327,7 +328,7 @@ impl Quick {
             vcpu: self.vcpu(),
             memory: self.memory(),
             arch: self.arch(),
-            enable_uefi: true,
+            firmware: Firmware::Uefi,
             networks: vec![network::Network::default()],
             disks: Vec::new(),
             fs: Vec::new(),

@@ -29,6 +29,7 @@ use crate::{
     graphics::Graphics,
     network::Network,
     storage::{Disk, Interface},
+    vm::Firmware,
     vmbuilder::{advanced::Advanced, quick::Quick},
 };
 
@@ -62,7 +63,7 @@ pub struct VMBuildData {
     pub vcpu: u16,
     pub memory: u32,
     pub networks: Vec<Network>,
-    pub enable_uefi: bool,
+    pub firmware: Firmware,
     pub disks: Vec<Disk>,
     pub fs: Vec<Filesystem>,
     pub remote_access: Option<RemoteAccess>,

@@ -12,10 +12,8 @@ use ratatui::{
 };
 
 use crate::{
-    Arch, BootOption,
     event::Event,
     graphics, network,
-    os::Os::{self},
     vmbuilder::{VMBuildData, access, fs, hardware, overview, port, storage},
 };
 
@@ -80,7 +78,7 @@ impl Advanced {
             vcpu: self.hardware.vcpu(),
             memory: self.hardware.memory(),
             arch: self.hardware.arch(),
-            enable_uefi: self.hardware.enable_uefi(),
+            firmware: self.hardware.firmware(),
             networks: self.network.networks().take(),
             disks: self.storage.disks(),
             fs: self.fs.filesystems(),
@@ -127,6 +125,7 @@ impl Advanced {
                 Section::Overview => {
                     if self.validate_overview_section() {
                         self.focused_section = Section::Hardware;
+                        self.hardware.refresh(self.overview.boot_option());
                     }
                 }
                 Section::Hardware => {
@@ -162,10 +161,6 @@ impl Advanced {
             KeyCode::BackTab => match self.focused_section {
                 Section::Overview => {
                     if self.validate_overview_section() {
-                        if self.overview.boot_option() == BootOption::CloudImage(Os::ArchLinux) {
-                            self.hardware.set_arch(Arch::X86_64);
-                        }
-
                         self.focused_section = Section::Summary;
                     }
                 }
@@ -174,18 +169,23 @@ impl Advanced {
                         self.focused_section = Section::Overview;
                     }
                 }
-                Section::Storage => self.focused_section = Section::Hardware,
+                Section::Storage => {
+                    self.focused_section = Section::Hardware;
+                    self.hardware.refresh(self.overview.boot_option());
+                }
                 Section::Filesystem => {
                     self.focused_section = Section::Storage;
                 }
                 Section::Network => {
                     self.port_fowrwaring.refresh();
-                    self.focused_section = Section::Filesystem
+                    self.focused_section = Section::Filesystem;
                 }
-                Section::PortForwarding => self.focused_section = Section::Network,
+                Section::PortForwarding => {
+                    self.focused_section = Section::Network;
+                }
                 Section::RemoteAccess => {
                     if self.validate_remote_access() {
-                        self.focused_section = Section::PortForwarding
+                        self.focused_section = Section::PortForwarding;
                     }
                 }
                 Section::Graphics => {
@@ -193,18 +193,16 @@ impl Advanced {
                         self.focused_section = Section::RemoteAccess;
                     }
                 }
-                Section::Summary => self.focused_section = Section::Graphics,
+                Section::Summary => {
+                    self.focused_section = Section::Graphics;
+                }
             },
             _ => match &self.focused_section {
                 Section::Overview => {
                     self.overview.handle_key_events(key_event);
                 }
                 Section::Hardware => {
-                    let os = match self.overview.boot_option() {
-                        BootOption::CloudImage(v) => Some(v),
-                        _ => None,
-                    };
-                    self.hardware.handle_key_events(key_event, os);
+                    self.hardware.handle_key_events(key_event);
                 }
                 Section::Storage => {
                     self.storage
