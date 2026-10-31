@@ -1,3 +1,12 @@
+## v0.5.0 - 2026-10-31
+
+> Note: Breaking changes
+
+- Add VDE network backend
+- Add Linux Direct Boot
+- Fix loading VMs when encoutering erros loading events file
+- Make `qemu-img` a prerequisite package
+
 ## v0.4.2 - 2026-10-10
 
 - fix: only use .xz for freebsd downloaded os files

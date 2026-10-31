@@ -1,6 +1,6 @@
 [package]
 name = "kudu"
-version = "0.4.2"
+version = "0.5.0"
 edition = "2024"
 license = "GPL-3.0-or-later"
 description = "Easily manage VMs on Linux"
@@ -17,7 +17,6 @@ ratatui = "0.30"
 tui-input = { version = "0.15", features = [
     "crossterm",
 ], default-features = false }
-dirs = "6"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 clap = { version = "4", features = ["derive", "cargo"] }
