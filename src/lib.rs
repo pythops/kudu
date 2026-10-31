@@ -72,7 +72,7 @@ impl TryFrom<&str> for Arch {
 pub enum BootOption {
     CloudImage(Os),
     LocalFile,
-    DirectLinuxBoot((PathBuf, PathBuf, String)),
+    DirectLinuxBoot((PathBuf, Option<PathBuf>, Option<String>)),
 }
 
 impl Default for BootOption {

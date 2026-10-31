@@ -27,7 +27,7 @@ enum Section {
     OS,
     Release,
     Kernel,
-    Initramfs,
+    Initrd,
     AppendOptions,
     Cloudinit,
 }
@@ -59,7 +59,7 @@ pub struct Overview {
     debian_release: DebianRelease,
     freebsd_release: FreebsdRelease,
     kernel: UserInputField,
-    initramfs: UserInputField,
+    initrd: UserInputField,
     appendoptions: UserInputField,
 }
 
@@ -74,8 +74,14 @@ impl Overview {
             BootOptionChoice::LocalFile => BootOption::LocalFile,
             BootOptionChoice::DirectLinuxBoot => BootOption::DirectLinuxBoot((
                 self.kernel.field.value().into(),
-                self.initramfs.field.value().into(),
-                self.appendoptions.field.value().into(),
+                {
+                    let v = self.initrd.field.value();
+                    if v.is_empty() { None } else { Some(v.into()) }
+                },
+                {
+                    let v = self.appendoptions.field.value();
+                    if v.is_empty() { None } else { Some(v.into()) }
+                },
             )),
         }
     }
@@ -317,7 +323,7 @@ impl Overview {
                     self.section = Section::BootOption;
                 }
                 KeyCode::Down => {
-                    self.section = Section::Initramfs;
+                    self.section = Section::Initrd;
                 }
                 _ => {
                     self.kernel
@@ -325,7 +331,7 @@ impl Overview {
                         .handle_event(&crossterm::event::Event::Key(key_event));
                 }
             },
-            Section::Initramfs => match key_event.code {
+            Section::Initrd => match key_event.code {
                 KeyCode::Up => {
                     self.section = Section::Kernel;
                 }
@@ -333,14 +339,14 @@ impl Overview {
                     self.section = Section::AppendOptions;
                 }
                 _ => {
-                    self.initramfs
+                    self.initrd
                         .field
                         .handle_event(&crossterm::event::Event::Key(key_event));
                 }
             },
             Section::AppendOptions => match key_event.code {
                 KeyCode::Up => {
-                    self.section = Section::Initramfs;
+                    self.section = Section::Initrd;
                 }
                 KeyCode::Down => {
                     self.section = Section::Cloudinit;
@@ -383,7 +389,7 @@ impl Overview {
         self.cloudinit.error = None;
         self.boot_file.error = None;
         self.kernel.error = None;
-        self.initramfs.error = None;
+        self.initrd.error = None;
         self.appendoptions.error = None;
 
         if self.name.field.value().is_empty() {
@@ -412,7 +418,7 @@ impl Overview {
             }
             BootOptionChoice::DirectLinuxBoot => {
                 let kernel = self.kernel.field.value();
-                let initramfs = self.initramfs.field.value();
+                let initrd = self.initrd.field.value();
 
                 if kernel.is_empty() {
                     self.kernel.error = Some("Field required".into());
@@ -423,14 +429,9 @@ impl Overview {
                         valid = false;
                     }
                 }
-                if initramfs.is_empty() {
-                    self.initramfs.error = Some("Field required".into());
+                if !initrd.is_empty() && !PathBuf::from(initrd).exists() {
+                    self.initrd.error = Some("Unvalid path".into());
                     valid = false;
-                } else {
-                    if !PathBuf::from(initramfs).exists() {
-                        self.initramfs.error = Some("Unvalid path".into());
-                        valid = false;
-                    }
                 }
             }
             _ => {}
@@ -505,7 +506,7 @@ impl Overview {
             file_path_block,
             storage_interface_block,
             kernel_block,
-            initramfs_block,
+            initrd_block,
             append_options_block,
             cloudinit_block,
         ) = {
@@ -744,21 +745,21 @@ impl Overview {
             ]),
         ];
 
-        let initramfs = vec![
+        let initrd = vec![
             Line::from(vec![
                 {
-                    if self.section == Section::Initramfs {
-                        Span::from("> Initramfs  ").bold()
+                    if self.section == Section::Initrd {
+                        Span::from("> Initrd  ").bold()
                     } else {
-                        Span::from("  Initramfs  ")
+                        Span::from("  Initrd  ")
                     }
                 },
-                Span::from(" "),
+                Span::from(" ".repeat(4)),
                 Span::from({
-                    let original_length = self.initramfs.field.to_string().len();
+                    let original_length = self.initrd.field.to_string().len();
                     let target_length = 65_usize;
 
-                    self.initramfs
+                    self.initrd
                         .field
                         .to_string()
                         .chars()
@@ -772,7 +773,7 @@ impl Overview {
             ]),
             Line::from(vec![
                 Span::from(" ".repeat(14)),
-                Span::from(self.initramfs.clone().error.unwrap_or("".to_string())).red(),
+                Span::from(self.initrd.clone().error.unwrap_or("".to_string())).red(),
             ]),
         ];
 
@@ -860,7 +861,7 @@ impl Overview {
             }
             BootOptionChoice::DirectLinuxBoot => {
                 frame.render_widget(Text::from(kernel), kernel_block);
-                frame.render_widget(Text::from(initramfs), initramfs_block);
+                frame.render_widget(Text::from(initrd), initrd_block);
                 frame.render_widget(Text::from(append_options), append_options_block);
             }
         }
@@ -884,8 +885,8 @@ impl Overview {
                     let y = area.y + 8;
                     frame.set_cursor_position((x, y));
                 }
-                Section::Initramfs if self.initramfs.field.visual_cursor() <= 61 => {
-                    let x = area.x + self.initramfs.field.visual_cursor() as u16 + 14;
+                Section::Initrd if self.initrd.field.visual_cursor() <= 61 => {
+                    let x = area.x + self.initrd.field.visual_cursor() as u16 + 14;
                     let y = area.y + 12;
                     frame.set_cursor_position((x, y));
                 }
