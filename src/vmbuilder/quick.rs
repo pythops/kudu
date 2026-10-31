@@ -11,6 +11,7 @@ use crate::{
     graphics::Graphics,
     network,
     os::{Os, debian::DebianRelease, freebsd::FreebsdRelease, ubuntu::UbuntuRelease},
+    vm::Firmware,
     vmbuilder::VMBuildData,
 };
 use crossterm::event::{KeyCode, KeyEvent};
@@ -321,14 +322,13 @@ impl Quick {
         }));
 
         VMBuildData {
-            boot_option: BootOption::CloudImage,
+            boot_option: BootOption::CloudImage(self.os()),
             name: self.name(),
             boot_file: None,
-            os: Some(self.os()),
             vcpu: self.vcpu(),
             memory: self.memory(),
             arch: self.arch(),
-            enable_uefi: true,
+            firmware: Firmware::Uefi,
             networks: vec![network::Network::default()],
             disks: Vec::new(),
             fs: Vec::new(),

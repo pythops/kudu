@@ -48,12 +48,18 @@ use crate::{
 
 pub type VmId = uuid::Uuid;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Firmware {
+    Bios,
+    Uefi,
+    None,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VM {
     pub id: VmId,
     pub name: String,
     pub boot_option: BootOption,
-    pub os: Option<Os>,
     pub arch: Arch,
     pub vcpu: u16,
     pub memory: u32,
@@ -196,7 +202,8 @@ impl VM {
             path.pop();
         }
 
-        if data.enable_uefi
+        if let BootOption::LocalFile | BootOption::CloudImage(_) = data.boot_option
+            && data.firmware == Firmware::Uefi
             && let Ok((code, vars)) = firmware::get_uefi_file_path(data.arch)
         {
             path.push("uefi_vars.fd");
@@ -273,7 +280,6 @@ impl VM {
             id,
             name: data.name,
             boot_option: data.boot_option,
-            os: data.os,
             arch: data.arch,
             vcpu: data.vcpu,
             memory: data.memory,
@@ -434,9 +440,8 @@ impl VM {
     }
 
     pub fn start(&mut self, sender: Sender<Event>) -> Result<()> {
-        if self.boot_option == BootOption::CloudImage {
-            let distro = self.os.unwrap();
-            if !distro.is_available(self.arch) {
+        if let BootOption::CloudImage(os) = self.boot_option {
+            if !os.is_available(self.arch) {
                 thread::spawn({
                     let vm = self.clone();
                     let sender = sender.clone();
@@ -447,7 +452,7 @@ impl VM {
                             vm.downloading
                                 .store(true, std::sync::atomic::Ordering::Relaxed);
                         }
-                        if let Err(error) = distro.download(vm.arch, sender.clone(), vm.id) {
+                        if let Err(error) = os.download(vm.arch, sender.clone(), vm.id) {
                             vm.downloading
                                 .store(false, std::sync::atomic::Ordering::Relaxed);
                             let _ = sender
@@ -461,7 +466,7 @@ impl VM {
                 return Ok(());
             } else {
                 if !self.get_boot_file().exists()
-                    && let Err(e) = fs::copy(distro.get_file_path(self.arch), self.get_boot_file())
+                    && let Err(e) = fs::copy(os.get_file_path(self.arch), self.get_boot_file())
                 {
                     let _ = sender.send(Event::Notification(Notification::error(e)));
                 }
@@ -650,8 +655,7 @@ impl VM {
             ]),
         ];
 
-        if self.boot_option == BootOption::CloudImage {
-            let os = self.os.unwrap();
+        if let BootOption::CloudImage(os) = self.boot_option {
             items.push(ListItem::from(vec![
                 Line::from(vec![
                     Span::from("OS").bold().fg(Color::Yellow),

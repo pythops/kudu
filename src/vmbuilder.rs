@@ -28,8 +28,8 @@ use crate::{
     fs::Filesystem,
     graphics::Graphics,
     network::Network,
-    os::Os::{self},
     storage::{Disk, Interface},
+    vm::Firmware,
     vmbuilder::{advanced::Advanced, quick::Quick},
 };
 
@@ -60,11 +60,10 @@ pub struct VMBuildData {
     pub name: String,
     pub cloudinit: Option<PathBuf>,
     pub boot_file: Option<(PathBuf, Interface)>,
-    pub os: Option<Os>,
     pub vcpu: u16,
     pub memory: u32,
     pub networks: Vec<Network>,
-    pub enable_uefi: bool,
+    pub firmware: Firmware,
     pub disks: Vec<Disk>,
     pub fs: Vec<Filesystem>,
     pub remote_access: Option<RemoteAccess>,

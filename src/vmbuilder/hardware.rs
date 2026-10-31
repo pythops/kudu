@@ -11,8 +11,9 @@ use tui_input::{Input, backend::crossterm::EventHandler};
 
 use crate::{
     Arch::{self},
+    BootOption,
     app::{INSTALLED_ARCHS, INSTALLED_UEFI},
-    os::Os,
+    vm::Firmware,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -26,7 +27,7 @@ pub enum Section {
     Cpu,
     Arch,
     Memory,
-    Uefi,
+    Firmware,
 }
 
 #[derive(Debug, Clone)]
@@ -35,27 +36,28 @@ pub struct Hardware {
     arch: Arch,
     vcpu: UserInputField,
     memory: UserInputField,
-    enable_uefi: bool,
+    firmware: Firmware,
+    boot_option: BootOption,
 }
 
 impl Hardware {
     pub fn new() -> Self {
-        let (arch, enable_uefi) = {
+        let (arch, firmware) = {
             match Arch::try_from(std::env::consts::ARCH).unwrap_or_default() {
                 Arch::X86_64 => {
                     if INSTALLED_ARCHS.contains(&Arch::X86_64) {
                         if INSTALLED_UEFI.contains(&Arch::X86_64) {
-                            (Arch::X86_64, true)
+                            (Arch::X86_64, Firmware::Uefi)
                         } else {
-                            (Arch::X86_64, false)
+                            (Arch::X86_64, Firmware::Bios)
                         }
                     } else {
                         if INSTALLED_ARCHS.contains(&Arch::Aarch64)
                             && INSTALLED_UEFI.contains(&Arch::Aarch64)
                         {
-                            (Arch::Aarch64, true)
+                            (Arch::Aarch64, Firmware::Uefi)
                         } else {
-                            (Arch::Riscv64, true)
+                            (Arch::Riscv64, Firmware::Uefi)
                         }
                     }
                 }
@@ -63,16 +65,16 @@ impl Hardware {
                     if INSTALLED_ARCHS.contains(&Arch::Aarch64)
                         && INSTALLED_UEFI.contains(&Arch::Aarch64)
                     {
-                        (Arch::Aarch64, true)
+                        (Arch::Aarch64, Firmware::Uefi)
                     } else {
                         if INSTALLED_ARCHS.contains(&Arch::X86_64) {
                             if INSTALLED_UEFI.contains(&Arch::X86_64) {
-                                (Arch::X86_64, true)
+                                (Arch::X86_64, Firmware::Uefi)
                             } else {
-                                (Arch::X86_64, false)
+                                (Arch::X86_64, Firmware::Bios)
                             }
                         } else {
-                            (Arch::Riscv64, true)
+                            (Arch::Riscv64, Firmware::Uefi)
                         }
                     }
                 }
@@ -80,21 +82,22 @@ impl Hardware {
                     if INSTALLED_ARCHS.contains(&Arch::Riscv64)
                         && INSTALLED_UEFI.contains(&Arch::Riscv64)
                     {
-                        (Arch::Riscv64, true)
+                        (Arch::Riscv64, Firmware::Uefi)
                     } else {
                         if INSTALLED_ARCHS.contains(&Arch::X86_64) {
                             if INSTALLED_UEFI.contains(&Arch::X86_64) {
-                                (Arch::X86_64, true)
+                                (Arch::X86_64, Firmware::Uefi)
                             } else {
-                                (Arch::X86_64, false)
+                                (Arch::X86_64, Firmware::Bios)
                             }
                         } else {
-                            (Arch::Aarch64, true)
+                            (Arch::Aarch64, Firmware::Uefi)
                         }
                     }
                 }
             }
         };
+
         Self {
             section: Section::Cpu,
             arch,
@@ -106,16 +109,21 @@ impl Hardware {
                 field: Input::from("512"),
                 error: None,
             },
-            enable_uefi,
+            firmware,
+            boot_option: BootOption::default(),
         }
+    }
+
+    pub fn firmware(&self) -> Firmware {
+        self.firmware
     }
 
     pub fn set_arch(&mut self, arch: Arch) {
         self.arch = arch;
     }
 
-    pub fn set_uefi(&mut self, enable: bool) {
-        self.enable_uefi = enable;
+    pub fn bypass_firmware(&mut self) {
+        self.firmware = Firmware::None;
     }
 
     pub fn vcpu(&self) -> u16 {
@@ -128,10 +136,6 @@ impl Hardware {
 
     pub fn arch(&self) -> Arch {
         self.arch
-    }
-
-    pub fn enable_uefi(&self) -> bool {
-        self.enable_uefi
     }
 
     pub fn validate(&mut self) -> bool {
@@ -178,11 +182,19 @@ impl Hardware {
         valid
     }
 
-    pub fn handle_key_events(&mut self, key_event: KeyEvent, os: Option<Os>) {
+    pub fn refresh(&mut self, boot_option: BootOption) {
+        self.boot_option = boot_option;
+    }
+
+    pub fn handle_key_events(&mut self, key_event: KeyEvent) {
         match self.section {
             Section::Cpu => match key_event.code {
                 KeyCode::Up if self.validate() => {
-                    self.section = Section::Uefi;
+                    if let BootOption::DirectLinuxBoot(_) = self.boot_option {
+                        self.section = Section::Arch;
+                    } else {
+                        self.section = Section::Firmware;
+                    }
                 }
                 KeyCode::Down if self.validate() => {
                     self.section = Section::Memory;
@@ -206,29 +218,40 @@ impl Hardware {
                         .handle_event(&crossterm::event::Event::Key(key_event));
                 }
             },
-            Section::Arch => match os {
-                Some(Os::ArchLinux) => match key_event.code {
-                    KeyCode::Up | KeyCode::Char('k') => {
-                        self.section = Section::Memory;
-                    }
-                    KeyCode::Down | KeyCode::Char('j') => {
-                        self.section = Section::Uefi;
-                    }
-                    _ => {}
-                },
-                _ => match key_event.code {
+
+            Section::Arch =>
+            // match os {
+            // Some(Os::ArchLinux) => match key_event.code {
+            //     KeyCode::Up | KeyCode::Char('k') => {
+            //         self.section = Section::Memory;
+            //     }
+            //     KeyCode::Down | KeyCode::Char('j') => {
+            //         if self.firmware != Firmware::None {
+            //             self.section = Section::Uefi;
+            //         } else {
+            //             self.section = Section::Cpu;
+            //         }
+            //     }
+            //     _ => {}
+            // },
+            {
+                match key_event.code {
                     KeyCode::Right | KeyCode::Char('l') => match self.arch {
                         Arch::X86_64 => {
                             if INSTALLED_ARCHS.contains(&Arch::Riscv64) {
                                 if INSTALLED_UEFI.contains(&Arch::Riscv64) {
                                     self.arch = Arch::Riscv64;
-                                    self.enable_uefi = true;
                                 }
                             } else if INSTALLED_ARCHS.contains(&Arch::Aarch64)
                                 && INSTALLED_UEFI.contains(&Arch::Aarch64)
                             {
                                 self.arch = Arch::Aarch64;
-                                self.enable_uefi = true;
+                            }
+
+                            if let BootOption::LocalFile | BootOption::CloudImage(_) =
+                                self.boot_option
+                            {
+                                self.firmware = Firmware::Uefi;
                             }
                         }
                         Arch::Aarch64 => {
@@ -238,14 +261,22 @@ impl Hardware {
                                 && INSTALLED_UEFI.contains(&Arch::Riscv64)
                             {
                                 self.arch = Arch::Riscv64;
-                                self.enable_uefi = true;
+                                if let BootOption::LocalFile | BootOption::CloudImage(_) =
+                                    self.boot_option
+                                {
+                                    self.firmware = Firmware::Uefi;
+                                }
                             }
                         }
                         Arch::Riscv64 => {
                             if INSTALLED_ARCHS.contains(&Arch::Aarch64) {
                                 if INSTALLED_UEFI.contains(&Arch::Aarch64) {
                                     self.arch = Arch::Aarch64;
-                                    self.enable_uefi = true;
+                                    if let BootOption::LocalFile | BootOption::CloudImage(_) =
+                                        self.boot_option
+                                    {
+                                        self.firmware = Firmware::Uefi;
+                                    }
                                 }
                             } else if INSTALLED_ARCHS.contains(&Arch::X86_64) {
                                 self.arch = Arch::X86_64;
@@ -257,20 +288,27 @@ impl Hardware {
                             if INSTALLED_ARCHS.contains(&Arch::Aarch64) {
                                 if INSTALLED_UEFI.contains(&Arch::Aarch64) {
                                     self.arch = Arch::Aarch64;
-                                    self.enable_uefi = true;
                                 }
                             } else if INSTALLED_ARCHS.contains(&Arch::Riscv64)
                                 && INSTALLED_UEFI.contains(&Arch::Riscv64)
                             {
                                 self.arch = Arch::Riscv64;
-                                self.enable_uefi = true;
+                            }
+                            if let BootOption::LocalFile | BootOption::CloudImage(_) =
+                                self.boot_option
+                            {
+                                self.firmware = Firmware::Uefi;
                             }
                         }
                         Arch::Aarch64 => {
                             if INSTALLED_ARCHS.contains(&Arch::Riscv64) {
                                 if INSTALLED_UEFI.contains(&Arch::Riscv64) {
                                     self.arch = Arch::Riscv64;
-                                    self.enable_uefi = true;
+                                    if let BootOption::LocalFile | BootOption::CloudImage(_) =
+                                        self.boot_option
+                                    {
+                                        self.firmware = Firmware::Uefi;
+                                    }
                                 }
                             } else if INSTALLED_ARCHS.contains(&Arch::X86_64) {
                                 self.arch = Arch::X86_64;
@@ -283,7 +321,11 @@ impl Hardware {
                                 && INSTALLED_UEFI.contains(&Arch::Aarch64)
                             {
                                 self.arch = Arch::Aarch64;
-                                self.enable_uefi = true;
+                                if let BootOption::LocalFile | BootOption::CloudImage(_) =
+                                    self.boot_option
+                                {
+                                    self.firmware = Firmware::Uefi;
+                                }
                             }
                         }
                     },
@@ -291,17 +333,29 @@ impl Hardware {
                         self.section = Section::Memory;
                     }
                     KeyCode::Down | KeyCode::Char('j') => {
-                        self.section = Section::Uefi;
+                        if let BootOption::DirectLinuxBoot(_) = self.boot_option {
+                            self.section = Section::Cpu;
+                        } else {
+                            self.section = Section::Firmware;
+                        }
                     }
                     _ => {}
-                },
-            },
-            Section::Uefi => match key_event.code {
+                }
+            }
+            Section::Firmware => match key_event.code {
                 KeyCode::Right | KeyCode::Char('l') | KeyCode::Left | KeyCode::Char('h')
                     if self.arch == Arch::X86_64 =>
                 {
                     if INSTALLED_UEFI.contains(&Arch::X86_64) {
-                        self.enable_uefi = !self.enable_uefi;
+                        match self.firmware {
+                            Firmware::Bios => {
+                                self.firmware = Firmware::Uefi;
+                            }
+                            Firmware::Uefi => {
+                                self.firmware = Firmware::Bios;
+                            }
+                            _ => {}
+                        }
                     }
                 }
                 KeyCode::Up | KeyCode::Char('k') => {
@@ -316,7 +370,7 @@ impl Hardware {
     }
 
     pub fn render(&self, frame: &mut Frame, area: Rect, cancel_confirmation_popup: bool) {
-        let (cpu_block, memory_block, arch_block, uefi_block) = {
+        let (cpu_block, memory_block, arch_block, firmware_block) = {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
@@ -406,20 +460,20 @@ impl Hardware {
             Span::from(format!("< {} >", self.arch).to_lowercase()),
         ]);
 
-        let uefi = Line::from(vec![
+        let firmware = Line::from(vec![
             {
-                if self.section == Section::Uefi {
-                    Span::from("> Uefi  ").bold()
+                if self.section == Section::Firmware {
+                    Span::from("> Firmware  ").bold()
                 } else {
-                    Span::from("  Uefi  ")
+                    Span::from("  Firmware  ")
                 }
             },
-            Span::from(" ".repeat(6)),
+            Span::from(" ".repeat(2)),
             Span::from({
                 if self.arch == Arch::X86_64 {
                     if !INSTALLED_UEFI.contains(&Arch::X86_64) {
                         "[x] BIOS"
-                    } else if self.enable_uefi {
+                    } else if self.firmware == Firmware::Uefi {
                         "[x] UEFI        [ ] BIOS"
                     } else {
                         "[ ] UEFI        [x] BIOS"
@@ -433,7 +487,10 @@ impl Hardware {
         frame.render_widget(Text::from(cpu), cpu_block);
         frame.render_widget(Text::from(memory), memory_block);
         frame.render_widget(Text::from(arch), arch_block);
-        frame.render_widget(Text::from(uefi), uefi_block);
+
+        if let BootOption::LocalFile | BootOption::CloudImage(_) = self.boot_option {
+            frame.render_widget(Text::from(firmware), firmware_block);
+        }
         // FIX: cursor shows on the confirmation popup
         if !cancel_confirmation_popup {
             match self.section {
@@ -482,7 +539,11 @@ impl Hardware {
                 Line::from(vec![
                     Span::from("Firmware").bold(),
                     Span::from(" ".repeat(12)),
-                    Span::from(if self.enable_uefi { "UEFI" } else { "BIOS" }),
+                    Span::from(if self.firmware == Firmware::Uefi {
+                        "UEFI"
+                    } else {
+                        "BIOS"
+                    }),
                 ]),
                 Line::from(""),
             ]),
