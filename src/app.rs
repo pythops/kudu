@@ -230,6 +230,7 @@ impl App {
 
         which("xorriso").with_context(|| "Please install xorriso package.")?;
         which("passt").with_context(|| "Please install passt package.")?;
+        which("qemu-img").with_context(|| "Please install qemu-img package.")?;
 
         let kvm_version = App::get_kvm_version();
 
