@@ -38,8 +38,13 @@ pub enum NetworkBackend {
     Slirp,
     Passt,
     Tap,
-    Bridge(String),
-    Vde((PathBuf, Option<u16>)),
+    Bridge {
+        interface: String,
+    },
+    Vde {
+        socket: PathBuf,
+        port: Option<u16>,
+    },
 }
 
 impl Display for NetworkBackend {
@@ -54,10 +59,10 @@ impl Display for NetworkBackend {
             NetworkBackend::Tap => {
                 write!(f, "Tap")
             }
-            NetworkBackend::Bridge(interface) => {
+            NetworkBackend::Bridge { interface } => {
                 write!(f, "Bridge({})", interface)
             }
-            NetworkBackend::Vde((socket, port)) => {
+            NetworkBackend::Vde { socket, port } => {
                 let port = if let Some(port) = port {
                     port.to_string()
                 } else {
@@ -167,11 +172,14 @@ impl Network {
                 ];
                 [&device[..], &netdev[..]].concat()
             }
-            NetworkBackend::Bridge(br) => {
-                let netdev = ["-netdev".to_string(), format!("bridge,br={br},id={id}")];
+            NetworkBackend::Bridge { interface } => {
+                let netdev = [
+                    "-netdev".to_string(),
+                    format!("bridge,br={interface},id={id}"),
+                ];
                 [&device[..], &netdev[..]].concat()
             }
-            NetworkBackend::Vde((socket, port)) => {
+            NetworkBackend::Vde { socket, port } => {
                 let sock = socket.to_string_lossy().to_string();
 
                 let netdev = if let Some(port) = port {

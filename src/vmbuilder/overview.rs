@@ -72,17 +72,17 @@ impl Overview {
         match self.boot_option_choice {
             BootOptionChoice::CloudImage => BootOption::CloudImage(self.os()),
             BootOptionChoice::LocalFile => BootOption::LocalFile,
-            BootOptionChoice::DirectLinuxBoot => BootOption::DirectLinuxBoot((
-                self.kernel.field.value().into(),
-                {
+            BootOptionChoice::DirectLinuxBoot => BootOption::DirectLinuxBoot {
+                kernel: self.kernel.field.value().into(),
+                initrd: {
                     let v = self.initrd.field.value();
                     if v.is_empty() { None } else { Some(v.into()) }
                 },
-                {
+                append: {
                     let v = self.appendoptions.field.value();
                     if v.is_empty() { None } else { Some(v.into()) }
                 },
-            )),
+            },
         }
     }
 

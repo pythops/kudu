@@ -109,7 +109,12 @@ impl Qemu {
             command.arg("-drive").arg(drive.to_qemu_arg());
         }
 
-        if let BootOption::DirectLinuxBoot((kernel, initrd, append)) = &vm.boot_option {
+        if let BootOption::DirectLinuxBoot {
+            kernel,
+            initrd,
+            append,
+        } = &vm.boot_option
+        {
             command.arg("-kernel").arg(kernel);
 
             if let Some(initrd) = initrd {

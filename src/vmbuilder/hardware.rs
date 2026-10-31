@@ -190,7 +190,7 @@ impl Hardware {
         match self.section {
             Section::Cpu => match key_event.code {
                 KeyCode::Up if self.validate() => {
-                    if let BootOption::DirectLinuxBoot(_) = self.boot_option {
+                    if let BootOption::DirectLinuxBoot { .. } = self.boot_option {
                         self.section = Section::Arch;
                     } else {
                         self.section = Section::Firmware;
@@ -333,7 +333,7 @@ impl Hardware {
                         self.section = Section::Memory;
                     }
                     KeyCode::Down | KeyCode::Char('j') => {
-                        if let BootOption::DirectLinuxBoot(_) = self.boot_option {
+                        if let BootOption::DirectLinuxBoot { .. } = self.boot_option {
                             self.section = Section::Cpu;
                         } else {
                             self.section = Section::Firmware;

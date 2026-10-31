@@ -519,7 +519,10 @@ impl VM {
                     .networks
                     .iter()
                     .find(|network| {
-                        network.backend == NetworkBackend::Bridge(KUDU_BRIDGE_INTERFACE.into())
+                        network.backend
+                            == NetworkBackend::Bridge {
+                                interface: KUDU_BRIDGE_INTERFACE.into(),
+                            }
                     })
                     .is_some()
                 {

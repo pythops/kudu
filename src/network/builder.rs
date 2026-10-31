@@ -278,7 +278,9 @@ impl NewNetwork {
     pub fn build(&self) -> Network {
         match self.backend {
             NetworkBackendName::Bridge => Network::new(
-                NetworkBackend::Bridge(KUDU_BRIDGE_INTERFACE.into()),
+                NetworkBackend::Bridge {
+                    interface: KUDU_BRIDGE_INTERFACE.into(),
+                },
                 self.nic,
                 Vec::new(),
                 Some(self.mac().unwrap_or(random_mac())),
@@ -302,7 +304,7 @@ impl NewNetwork {
                     Some(self.port.field.value().parse::<u16>().unwrap())
                 };
                 let socket = PathBuf::from(self.socket.field.value());
-                let backend = NetworkBackend::Vde((socket, port));
+                let backend = NetworkBackend::Vde { socket, port };
                 Network::new(backend, self.nic, Vec::new(), self.mac())
             }
         }
