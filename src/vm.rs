@@ -123,7 +123,7 @@ impl VM {
                             }
                         }
 
-                        vm.load_events_from_file()?;
+                        vm.load_events_from_file();
 
                         vms.push(vm);
                     }
@@ -550,18 +550,21 @@ impl VM {
         Ok(())
     }
 
-    pub fn load_events_from_file(&mut self) -> Result<()> {
+    pub fn load_events_from_file(&mut self) {
         let mut path = get_kudu_data_dir();
         path.push("vms");
         path.push(self.id.to_string());
         path.push("events.json");
 
-        let buf = fs::read_to_string(path)?;
-        let events: Vec<String> = serde_json::from_str(&buf)?;
-
-        self.events = events;
-
-        Ok(())
+        if let Ok(buf) = fs::read_to_string(path) {
+            if let Ok(events) = serde_json::from_str::<Vec<String>>(&buf) {
+                self.events = events;
+            } else {
+                self.events = Vec::new();
+            }
+        } else {
+            self.events = Vec::new();
+        }
     }
 
     pub fn handle_key_events(&mut self, key_event: KeyEvent, sender: Sender<Event>) -> Result<()> {
