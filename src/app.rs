@@ -2,6 +2,7 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::LazyLock;
 use std::thread;
 use std::{fs::create_dir_all, sync::mpsc::Sender};
 
@@ -30,50 +31,48 @@ use crate::{
     notification::Notification, vm::VM, vmbuilder::VMBuilder,
 };
 use crate::{KUDU_BRIDGE_INTERFACE, KVM_ENABLED, USER_UID, firmware};
-use lazy_static::lazy_static;
 
-lazy_static! {
-    pub static ref INSTALLED_ARCHS: Vec<Arch> = {
-        let mut available_archs = Vec::new();
-        if which("qemu-system-x86_64").is_ok() {
-            available_archs.push(Arch::X86_64);
-        }
+pub static INSTALLED_ARCHS: LazyLock<Vec<Arch>> = LazyLock::new(|| {
+    let mut available_archs = Vec::new();
+    if which("qemu-system-x86_64").is_ok() {
+        available_archs.push(Arch::X86_64);
+    }
 
-        if which("qemu-system-aarch64").is_ok() {
-            available_archs.push(Arch::Aarch64);
-        }
-        if which("qemu-system-riscv64").is_ok() {
-            available_archs.push(Arch::Riscv64);
-        }
-        available_archs
-    };
-    pub static ref INSTALLED_UEFI: Vec<Arch> = {
-        let mut installed = Vec::new();
+    if which("qemu-system-aarch64").is_ok() {
+        available_archs.push(Arch::Aarch64);
+    }
+    if which("qemu-system-riscv64").is_ok() {
+        available_archs.push(Arch::Riscv64);
+    }
+    available_archs
+});
 
-        if let Ok((uefi, vars)) = firmware::get_uefi_file_path(Arch::X86_64)
-            && uefi.exists()
-            && vars.exists()
-        {
-            installed.push(Arch::X86_64);
-        }
+pub static INSTALLED_UEFI: LazyLock<Vec<Arch>> = LazyLock::new(|| {
+    let mut installed = Vec::new();
 
-        if let Ok((uefi, vars)) = firmware::get_uefi_file_path(Arch::Aarch64)
-            && uefi.exists()
-            && vars.exists()
-        {
-            installed.push(Arch::Aarch64);
-        }
+    if let Ok((uefi, vars)) = firmware::get_uefi_file_path(Arch::X86_64)
+        && uefi.exists()
+        && vars.exists()
+    {
+        installed.push(Arch::X86_64);
+    }
 
-        if let Ok((uefi, vars)) = firmware::get_uefi_file_path(Arch::Riscv64)
-            && uefi.exists()
-            && vars.exists()
-        {
-            installed.push(Arch::Riscv64);
-        }
+    if let Ok((uefi, vars)) = firmware::get_uefi_file_path(Arch::Aarch64)
+        && uefi.exists()
+        && vars.exists()
+    {
+        installed.push(Arch::Aarch64);
+    }
 
-        installed
-    };
-}
+    if let Ok((uefi, vars)) = firmware::get_uefi_file_path(Arch::Riscv64)
+        && uefi.exists()
+        && vars.exists()
+    {
+        installed.push(Arch::Riscv64);
+    }
+
+    installed
+});
 
 #[derive(Debug, Default, PartialEq)]
 pub enum FocusedSection {

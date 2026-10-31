@@ -21,13 +21,24 @@ use qapi::qmp::RunState;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
-use clap::{Command, crate_description, crate_name, crate_version};
-
 fn main() -> Result<()> {
-    Command::new(crate_name!())
-        .about(crate_description!())
-        .version(crate_version!())
-        .get_matches();
+    let args: Vec<String> = std::env::args().collect();
+
+    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
+        println!(
+            "{} {}\n\n{}\n\nUSAGE:\n    {} [OPTIONS]\n\nOPTIONS:\n    -h, --help       Print help information\n    -V, --version    Print version information",
+            env!("CARGO_PKG_NAME"),
+            env!("CARGO_PKG_VERSION"),
+            env!("CARGO_PKG_DESCRIPTION"),
+            env!("CARGO_PKG_NAME"),
+        );
+        return Ok(());
+    }
+
+    if args.iter().any(|arg| arg == "--version" || arg == "-V") {
+        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
 
     if std::env::consts::OS != "linux" {
         println!("kudu only runs on Linux");
