@@ -107,14 +107,14 @@ impl NetworkBuilder {
     }
 
     pub fn summary(&self) -> Vec<ListItem<'_>> {
+        let networks = self.networks.borrow();
         vec![ListItem::from({
             let mut lines = Vec::new();
-            let networks = self.networks.borrow();
             if networks.is_empty() {
                 vec![
                     Line::from(vec![
                         Span::from("Networks").bold(),
-                        Span::from(" ".repeat(11)),
+                        Span::from(" ".repeat(12)),
                         Span::from(" - "),
                     ]),
                     Line::from(""),
@@ -123,26 +123,20 @@ impl NetworkBuilder {
                 lines.push(Line::from(vec![
                     Span::from("Networks").bold(),
                     Span::from(" ".repeat(12)),
-                    Span::from("Id   ").bold(),
-                    Span::from(" ".repeat(8)),
-                    Span::from("Backend").bold(),
-                    Span::from(" ".repeat(12)),
-                    Span::from("  Nic  ").bold(),
-                    Span::from(" ".repeat(14)),
-                    Span::from("  Mac  ").bold(),
+                    Span::from(format!("{:12}", "id")).bold(),
+                    Span::from(format!("{:25}", "Backend")).bold(),
+                    Span::from(format!("{:18}", "Nic")).bold(),
+                    Span::from(format!("{:17}", "Mac")).bold(),
                 ]));
                 lines.push(Line::from(""));
                 for network in networks.iter() {
                     lines.push(Line::from(vec![
                         Span::from(" ".repeat(20)),
-                        Span::from(format!("{:8}", network.id)),
-                        Span::from(" ".repeat(5)),
-                        Span::from(format!("{:14}", network.backend)),
-                        Span::from(" ".repeat(7)),
-                        Span::from(format!("{:14}", network.nic)),
-                        Span::from(" ".repeat(7)),
+                        Span::from(format!("{:<12}", network.id)),
+                        Span::from(format!("{:<25}", network.backend.to_string())),
+                        Span::from(format!("{:<18}", network.nic)),
                         Span::from(format!(
-                            "{:17}",
+                            "{:<17}",
                             network.mac.clone().unwrap_or("Auto".to_string())
                         )),
                     ]))
@@ -194,14 +188,7 @@ impl NetworkBuilder {
                 .row_highlight_style(Style::new().on_dark_gray())
                 .column_spacing(1);
 
-            frame.render_stateful_widget(
-                networks,
-                area.inner(Margin {
-                    horizontal: 2,
-                    vertical: 2,
-                }),
-                &mut self.netowrk_state,
-            );
+            frame.render_stateful_widget(networks, area, &mut self.netowrk_state);
         }
         if let Some(new_network) = &self.new_network {
             new_network.render(frame);

@@ -296,7 +296,7 @@ impl Advanced {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(30),
+                Constraint::Length(31),
                 Constraint::Fill(1),
             ])
             .split(frame.area())[1];
@@ -334,7 +334,7 @@ impl Advanced {
 
         let area = area.inner(Margin {
             horizontal: 2,
-            vertical: 1,
+            vertical: 2,
         });
 
         let (section_block, area) = {
@@ -410,13 +410,7 @@ impl Advanced {
                     .flex(ratatui::layout::Flex::Center)
                     .split(area)[1];
 
-                frame.render_widget(
-                    list,
-                    area.inner(Margin {
-                        horizontal: 2,
-                        vertical: 1,
-                    }),
-                );
+                frame.render_widget(list, area);
             }
         }
     }

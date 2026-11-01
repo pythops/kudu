@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Flex, Layout, Margin, Rect},
+    layout::{Constraint, Direction, Flex, Layout, Rect},
     style::{Style, Stylize},
     text::{Line, Span, Text},
     widgets::{ListItem, Row, Table, TableState},
@@ -211,14 +211,7 @@ impl PortForwarding {
                 .row_highlight_style(Style::new().on_dark_gray())
                 .column_spacing(1);
 
-            frame.render_stateful_widget(
-                mappings,
-                area.inner(Margin {
-                    horizontal: 2,
-                    vertical: 2,
-                }),
-                &mut self.mapping_state,
-            );
+            frame.render_stateful_widget(mappings, area, &mut self.mapping_state);
         }
 
         if let Some(new_mapping) = &self.new_mapping {

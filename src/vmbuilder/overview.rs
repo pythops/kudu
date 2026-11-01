@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Margin, Rect},
+    layout::{Constraint, Direction, Layout, Rect},
     style::Stylize,
     text::{Line, Span, Text},
     widgets::ListItem,
@@ -472,32 +472,51 @@ impl Overview {
                 ]));
             }
             BootOptionChoice::DirectLinuxBoot => {
-                //TODO:
+                if let BootOption::DirectLinuxBoot {
+                    kernel,
+                    initrd,
+                    append,
+                } = self.boot_option()
+                {
+                    items.push(ListItem::from(vec![Line::from(vec![
+                        Span::from("Direct Linux Boot").bold(),
+                        Span::from(" ".repeat(3)),
+                        Span::from(format!("kernel: {}", kernel.to_string_lossy())),
+                    ])]));
+                    if let Some(initrd) = initrd {
+                        items.push(ListItem::from(vec![Line::from(vec![
+                            Span::from(""),
+                            Span::from(" ".repeat(20)),
+                            Span::from(format!("initrd: {}", initrd.to_string_lossy())),
+                        ])]));
+                    }
+                    if let Some(append) = append {
+                        items.push(ListItem::from(vec![Line::from(vec![
+                            Span::from(""),
+                            Span::from(" ".repeat(20)),
+                            Span::from(format!("Append: {}", append)),
+                        ])]));
+                    }
+                }
+                items.push(Line::raw("").into());
             }
         };
 
-        items.push(ListItem::from(vec![
-            Line::from(vec![
-                Span::from("Cloudinit Path").bold(),
-                Span::from(" ".repeat(6)),
-                Span::from(if self.cloudinit.field.value().is_empty() {
-                    "Not Specified"
-                } else {
-                    self.cloudinit.field.value()
-                }),
-            ]),
-            Line::from(""),
-        ]));
+        if !self.cloudinit.field.value().is_empty() {
+            items.push(ListItem::from(vec![
+                Line::from(vec![
+                    Span::from("Cloudinit Path").bold(),
+                    Span::from(" ".repeat(6)),
+                    Span::from(self.cloudinit.field.value()),
+                ]),
+                Line::from(""),
+            ]));
+        }
 
         items
     }
 
     pub fn render(&self, frame: &mut Frame, area: Rect, cancel_confirmation_popup: bool) {
-        let area = area.inner(Margin {
-            horizontal: 0,
-            vertical: 1,
-        });
-
         let (
             name_block,
             boot_block,

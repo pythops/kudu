@@ -1,6 +1,6 @@
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Flex, Layout, Margin, Rect},
+    layout::{Constraint, Direction, Flex, Layout, Rect},
     style::{Style, Stylize},
     text::{Line, Span, Text},
     widgets::{ListItem, Row, Table, TableState},
@@ -166,14 +166,7 @@ impl Storage {
                 .row_highlight_style(Style::new().on_dark_gray())
                 .column_spacing(1);
 
-            frame.render_stateful_widget(
-                disks,
-                area.inner(Margin {
-                    horizontal: 2,
-                    vertical: 2,
-                }),
-                &mut self.disk_state,
-            );
+            frame.render_stateful_widget(disks, area, &mut self.disk_state);
         }
         if let Some(new_disk) = &self.new_disk {
             new_disk.render(frame);

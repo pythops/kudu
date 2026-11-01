@@ -122,10 +122,6 @@ impl Hardware {
         self.arch = arch;
     }
 
-    pub fn bypass_firmware(&mut self) {
-        self.firmware = Firmware::None;
-    }
-
     pub fn vcpu(&self) -> u16 {
         self.vcpu.field.value().parse::<u16>().unwrap()
     }
@@ -379,7 +375,6 @@ impl Hardware {
                     Constraint::Length(4),
                     Constraint::Length(4),
                 ])
-                .margin(1)
                 .split(area);
 
             (chunks[0], chunks[1], chunks[2], chunks[3])
@@ -495,13 +490,13 @@ impl Hardware {
         if !cancel_confirmation_popup {
             match self.section {
                 Section::Cpu if self.vcpu.field.visual_cursor() < 50 => {
-                    let x = area.x + self.vcpu.field.visual_cursor() as u16 + 15;
-                    let y = area.y + 1;
+                    let x = area.x + self.vcpu.field.visual_cursor() as u16 + 14;
+                    let y = area.y;
                     frame.set_cursor_position((x, y));
                 }
                 Section::Memory if self.memory.field.visual_cursor() < 50 => {
-                    let x = area.x + self.memory.field.visual_cursor() as u16 + 15;
-                    let y = area.y + 5;
+                    let x = area.x + self.memory.field.visual_cursor() as u16 + 14;
+                    let y = area.y + 4;
                     frame.set_cursor_position((x, y));
                 }
                 _ => {}

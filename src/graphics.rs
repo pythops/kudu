@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,
-    layout::{Constraint, Margin, Rect},
+    layout::{Constraint, Rect},
     style::Stylize,
     text::{Line, Span},
     widgets::{ListItem, Row, Table},
@@ -573,12 +573,6 @@ impl GraphicsBuilder {
 
         let table = Table::new(rows, widths);
 
-        frame.render_widget(
-            table,
-            area.inner(Margin {
-                horizontal: 2,
-                vertical: 2,
-            }),
-        );
+        frame.render_widget(table, area);
     }
 }
