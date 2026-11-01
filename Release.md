@@ -1,3 +1,11 @@
+## v0.6.0 - 2026-11-01
+
+> Note: Breaking changes
+
+- Add `firmware` field in the vm.json definition
+- Drop unecessary dependencies
+- Use `-cpu host` when possible
+
 ## v0.5.0 - 2026-10-31
 
 > Note: Breaking changes
