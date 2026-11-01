@@ -115,7 +115,11 @@ impl Hardware {
     }
 
     pub fn firmware(&self) -> Firmware {
-        self.firmware
+        if let BootOption::DirectLinuxBoot { .. } = self.boot_option {
+            Firmware::None
+        } else {
+            self.firmware
+        }
     }
 
     pub fn set_arch(&mut self, arch: Arch) {
@@ -534,11 +538,7 @@ impl Hardware {
                 Line::from(vec![
                     Span::from("Firmware").bold(),
                     Span::from(" ".repeat(12)),
-                    Span::from(if self.firmware == Firmware::Uefi {
-                        "UEFI"
-                    } else {
-                        "BIOS"
-                    }),
+                    Span::from(self.firmware().to_string()),
                 ]),
                 Line::from(""),
             ]),

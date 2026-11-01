@@ -48,7 +48,7 @@ use crate::{
 
 pub type VmId = uuid::Uuid;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, strum::Display, Serialize, Deserialize)]
 pub enum Firmware {
     Bios,
     Uefi,
@@ -60,6 +60,7 @@ pub struct VM {
     pub id: VmId,
     pub name: String,
     pub boot_option: BootOption,
+    pub firmware: Firmware,
     pub arch: Arch,
     pub vcpu: u16,
     pub memory: u32,
@@ -280,6 +281,7 @@ impl VM {
             id,
             name: data.name,
             boot_option: data.boot_option,
+            firmware: data.firmware,
             arch: data.arch,
             vcpu: data.vcpu,
             memory: data.memory,
@@ -637,11 +639,6 @@ impl VM {
             events_block,
         );
 
-        let enable_uefi = self
-            .drives
-            .iter()
-            .any(|drive| drive.interface == Interface::Pflash);
-
         let mut items = vec![
             ListItem::from(vec![
                 Line::from(vec![
@@ -661,33 +658,63 @@ impl VM {
             ]),
         ];
 
-        if let BootOption::CloudImage(os) = self.boot_option {
-            items.push(ListItem::from(vec![
-                Line::from(vec![
-                    Span::from("OS").bold().fg(Color::Yellow),
-                    Span::from(" ".repeat(15)),
-                    Span::from(os.to_string()),
-                ]),
-                Line::from(""),
-            ]));
-
-            let version = match os {
-                Os::Debian(release) => Some(release.get_version_number()),
-                Os::Ubuntu(release) => Some(release.get_version_number()),
-                Os::Freebsd(release) => Some(release.get_version_number()),
-                _ => None,
-            };
-            if let Some(version) = version {
+        match &self.boot_option {
+            BootOption::CloudImage(os) => {
                 items.push(ListItem::from(vec![
                     Line::from(vec![
-                        Span::from("Release").bold().fg(Color::Yellow),
-                        Span::raw("          "),
-                        Span::raw(version),
+                        Span::from("OS").bold().fg(Color::Yellow),
+                        Span::from(" ".repeat(15)),
+                        Span::from(os.to_string()),
                     ]),
                     Line::from(""),
                 ]));
+
+                let version = match os {
+                    Os::Debian(release) => Some(release.get_version_number()),
+                    Os::Ubuntu(release) => Some(release.get_version_number()),
+                    Os::Freebsd(release) => Some(release.get_version_number()),
+                    _ => None,
+                };
+                if let Some(version) = version {
+                    items.push(ListItem::from(vec![
+                        Line::from(vec![
+                            Span::from("Release").bold().fg(Color::Yellow),
+                            Span::raw("          "),
+                            Span::raw(version),
+                        ]),
+                        Line::from(""),
+                    ]));
+                }
             }
+            BootOption::DirectLinuxBoot {
+                kernel,
+                initrd,
+                append,
+            } => {
+                items.push(ListItem::from(vec![Line::from(vec![
+                    Span::from("DirectLinuxBoot").bold().fg(Color::Yellow),
+                    Span::from(" ".repeat(2)),
+                    Span::from(format!("kernel: {}", kernel.to_string_lossy())),
+                ])]));
+                if let Some(initrd) = initrd {
+                    items.push(ListItem::from(vec![Line::from(vec![
+                        Span::from(""),
+                        Span::from(" ".repeat(17)),
+                        Span::from(format!("initrd: {}", initrd.to_string_lossy())),
+                    ])]));
+                }
+                if let Some(append) = append {
+                    items.push(ListItem::from(vec![Line::from(vec![
+                        Span::from(""),
+                        Span::from(" ".repeat(17)),
+                        Span::from(format!("Append: {}", append)),
+                    ])]));
+                }
+                items.push(Line::raw("").into());
+            }
+            _ => {}
         }
+
         items.extend(vec![
             ListItem::from(vec![
                 Line::from(vec![
@@ -717,7 +744,7 @@ impl VM {
                 Line::from(vec![
                     Span::from("Firmware").bold().fg(Color::Yellow),
                     Span::from(" ".repeat(9)),
-                    Span::from(if enable_uefi { "UEFI" } else { "BIOS" }),
+                    Span::from(self.firmware.to_string()),
                 ]),
                 Line::from(""),
             ]),
