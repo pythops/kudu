@@ -1,6 +1,7 @@
+use ratatui::crossterm;
 use serde::{Deserialize, Serialize};
 
-use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use rustix::path::Arg;
 
 use std::path::PathBuf;

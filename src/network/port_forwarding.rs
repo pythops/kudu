@@ -1,6 +1,8 @@
+use ratatui::crossterm;
 use std::{cell::RefCell, rc::Rc};
 
-use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
+
 use serde::{Deserialize, Serialize};
 use tui_input::{Input, backend::crossterm::EventHandler};
 

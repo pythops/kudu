@@ -1,3 +1,4 @@
+use ratatui::crossterm;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
@@ -6,7 +7,7 @@ use ratatui::{
     widgets::ListItem,
 };
 
-use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use tui_input::{Input, backend::crossterm::EventHandler};
 
 use crate::{

@@ -17,7 +17,7 @@ use kudu::{
     vm::VM,
     vmbuilder::VMBuilder,
 };
-use qapi::qmp::RunState;
+use qapi::qmp;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
@@ -180,15 +180,15 @@ fn main() -> Result<()> {
                 if let Some(vm) = app.vms.iter_mut().find(|m| m.id == id) {
                     let message = match &event {
                         qapi::qmp::Event::STOP { .. } => {
-                            vm.state = RunState::paused;
+                            vm.state = qmp::RunState::paused;
                             "PAUSE".to_string()
                         }
                         qapi::qmp::Event::RESUME { .. } => {
-                            vm.state = RunState::running;
+                            vm.state = qmp::RunState::running;
                             "RESUME".to_string()
                         }
                         qapi::qmp::Event::SUSPEND { .. } => {
-                            vm.state = RunState::suspended;
+                            vm.state = qmp::RunState::suspended;
                             "SUSPEND".to_string()
                         }
                         qapi::qmp::Event::SHUTDOWN { .. } => {
@@ -233,7 +233,7 @@ fn main() -> Result<()> {
 
             Event::QemuExit(id) => {
                 if let Some(vm) = app.vms.iter_mut().find(|m| m.id == id)
-                    && vm.state != RunState::shutdown
+                    && vm.state != qmp::RunState::shutdown
                     && let Err(error) = vm.shutdown()
                 {
                     let notif =

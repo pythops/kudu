@@ -6,10 +6,10 @@ pub mod storage;
 use anyhow::Result;
 use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc, sync::mpsc::Sender};
 
-use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
 use ratatui::{
-    Frame,
+    Frame, crossterm,
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span, Text},

@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{ListItem, Row, Table, TableState},
 };
 
-use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
 use crate::fs::{Filesystem, NewFs};
 

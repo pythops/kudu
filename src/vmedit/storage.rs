@@ -1,8 +1,9 @@
+use ratatui::crossterm;
 use std::{collections::HashMap, path::PathBuf};
 
 use anyhow::Result;
 use anyhow::anyhow;
-use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
 use ratatui::layout::Flex;
 use ratatui::text::Line;

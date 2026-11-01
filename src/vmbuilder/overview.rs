@@ -1,6 +1,7 @@
+use ratatui::crossterm;
 use std::path::PathBuf;
 
-use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
 use ratatui::{
     Frame,

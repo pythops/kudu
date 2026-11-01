@@ -1,7 +1,8 @@
+use ratatui::crossterm;
 use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
-use crossterm::event::{KeyCode, KeyEvent};
 use rand::RngExt;
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Flex, Layout, Margin, Rect},

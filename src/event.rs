@@ -6,7 +6,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crossterm::event::{self, Event as CrosstermEvent, KeyEvent, KeyEventKind, MouseEvent};
+use ratatui::crossterm::event::{
+    self, Event as CrosstermEvent, KeyEvent, KeyEventKind, MouseEvent,
+};
 
 #[derive(Clone)]
 pub enum DownloadEvent {

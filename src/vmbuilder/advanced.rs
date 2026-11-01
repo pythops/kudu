@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::sync::mpsc::Sender;
 
-use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
 use ratatui::{
     Frame,

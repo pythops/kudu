@@ -1,4 +1,5 @@
-use crossterm::event::{
+use ratatui::crossterm;
+use ratatui::crossterm::event::{
     KeyCode::{self},
     KeyEvent,
 };

@@ -14,7 +14,8 @@ use crate::{
     vm::Firmware,
     vmbuilder::VMBuildData,
 };
-use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm;
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
 use ratatui::{
     Frame,

@@ -2,9 +2,9 @@ use crate::app::App;
 use crate::event::EventHandler;
 use crate::ui;
 use anyhow::Result;
-use crossterm::cursor::SetCursorStyle;
 use ratatui::Terminal;
 use ratatui::backend::Backend;
+use ratatui::crossterm::cursor::SetCursorStyle;
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use std::{io, panic};
 

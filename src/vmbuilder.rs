@@ -10,7 +10,7 @@ mod storage;
 use anyhow::Result;
 use std::{path::PathBuf, sync::mpsc::Sender};
 
-use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
 use ratatui::{
     Frame,

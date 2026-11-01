@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use chrono::Utc;
-use crossterm::event::{KeyCode, KeyEvent};
 use qapi::qmp::{RunState, VncInfo};
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::Debug,

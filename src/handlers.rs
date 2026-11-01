@@ -1,8 +1,8 @@
 use std::{cmp::min, sync::mpsc::Sender};
 
 use anyhow::Result;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use qapi::qmp::RunState;
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::{
     app::{App, FocusedSection},
