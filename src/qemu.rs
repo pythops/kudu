@@ -26,18 +26,36 @@ impl Qemu {
         let vm_events_path = VM::get_events_file(vm.id);
 
         let mut command = match vm.arch {
-            Arch::X86_64 => Command::new("qemu-system-x86_64"),
+            Arch::X86_64 => {
+                let mut command = Command::new("qemu-system-x86_64");
+
+                if let Ok(host_arch) = Arch::try_from(std::env::consts::ARCH)
+                    && host_arch == vm.arch
+                    && unsafe { KVM_ENABLED }
+                {
+                    command.arg("-enable-kvm").arg("-cpu").arg("host");
+                }
+
+                command
+            }
             Arch::Aarch64 => {
                 let mut command = Command::new("qemu-system-aarch64");
                 command
                     .arg("-machine")
                     .arg("virt")
-                    .arg("-cpu")
-                    .arg("max")
                     .arg("-device")
                     .arg("qemu-xhci")
                     .arg("-device")
                     .arg("usb-kbd");
+
+                if let Ok(host_arch) = Arch::try_from(std::env::consts::ARCH)
+                    && host_arch == vm.arch
+                    && unsafe { KVM_ENABLED }
+                {
+                    command.arg("-enable-kvm").arg("-cpu").arg("host");
+                } else {
+                    command.arg("-cpu").arg("max");
+                }
 
                 command
             }
@@ -46,12 +64,19 @@ impl Qemu {
                 command
                     .arg("-machine")
                     .arg("virt")
-                    .arg("-cpu")
-                    .arg("max")
                     .arg("-device")
                     .arg("qemu-xhci")
                     .arg("-device")
                     .arg("usb-kbd");
+
+                if let Ok(host_arch) = Arch::try_from(std::env::consts::ARCH)
+                    && host_arch == vm.arch
+                    && unsafe { KVM_ENABLED }
+                {
+                    command.arg("-enable-kvm").arg("-cpu").arg("host");
+                } else {
+                    command.arg("-cpu").arg("max");
+                }
 
                 command
             }
@@ -63,13 +88,6 @@ impl Qemu {
             for network in &vm.networks {
                 command.args(network.to_qemu_arg());
             }
-        }
-
-        if let Ok(host_arch) = Arch::try_from(std::env::consts::ARCH)
-            && host_arch == vm.arch
-            && unsafe { KVM_ENABLED }
-        {
-            command.arg("-enable-kvm");
         }
 
         command.args(vm.graphics.to_qemu_arg());
