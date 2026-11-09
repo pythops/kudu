@@ -24,11 +24,11 @@
 - `vde` if you want to use [vde network backend](https://github.com/virtualsquare/vde-2)
 - uefi firmware package (Optional for x86_64)
 
-  |             | Debian/Ubuntu    | Arch (btw)   | Fedora       |
-  | ----------- | ---------------- | ------------ | ------------ |
-  | **x86_64**  | ovmf             | edk2-ovmf    | edk2-ovmf    |
-  | **aarch64** | qemu-efi-aarch64 | edk2-aarch64 | edk2-aarch64 |
-  | **riscv64** | qemu-efi-riscv64 | edk2-riscv64 | -            |
+  |             | Debian/Ubuntu    | Arch (btw)   | Fedora       | Alpine |
+  | ----------- | ---------------- | ------------ | ------------ | ------ |
+  | **x86_64**  | ovmf             | edk2-ovmf    | edk2-ovmf    | ovmf   |
+  | **aarch64** | qemu-efi-aarch64 | edk2-aarch64 | edk2-aarch64 | edk2   |
+  | **riscv64** | qemu-efi-riscv64 | edk2-riscv64 | -            | -      |
 
 ## Installation
 
