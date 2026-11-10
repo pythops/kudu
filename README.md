@@ -22,6 +22,7 @@
 - `passt`
 - `xz`
 - `vde` if you want to use [vde network backend](https://github.com/virtualsquare/vde-2)
+- `seabios` only for x86 arch target.
 - uefi firmware package (Optional for x86_64)
 
   |             | Debian/Ubuntu    | Arch (btw)   | Fedora       | Alpine |
