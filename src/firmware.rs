@@ -45,6 +45,17 @@ pub fn get_uefi_file_path(arch: Arch) -> Result<(PathBuf, PathBuf)> {
                 )),
                 _ => Err(anyhow::anyhow!("Unsupported Arch")),
             },
+            "alpine" => match arch {
+                Arch::X86_64 => Ok((
+                    PathBuf::from("/usr/share/OVMF/OVMF_CODE.fd"),
+                    PathBuf::from("/usr/share/OVMF/OVMF_VARS.fd"),
+                )),
+                Arch::Aarch64 => Ok((
+                    PathBuf::from("/usr/share/qemu/edk2-aarch64-code.fd"),
+                    PathBuf::from("/usr/share/qemu/edk2-arm-vars.fd"),
+                )),
+                _ => Err(anyhow::anyhow!("Unsupported Arch")),
+            },
             _ => Err(anyhow::anyhow!("Unsupported OS")),
         }
     } else {
@@ -68,6 +79,11 @@ pub fn uefi_package(arch: Arch) -> Result<&'static str> {
             "fedora" | "rhel" => match arch {
                 Arch::X86_64 => Ok("edk2-ovmf"),
                 Arch::Aarch64 => Ok("edk2-aarch64"),
+                _ => Err(anyhow::anyhow!("Unsupported Arch")),
+            },
+            "alpine" => match arch {
+                Arch::X86_64 => Ok("ovmf"),
+                Arch::Aarch64 => Ok("edk2"),
                 _ => Err(anyhow::anyhow!("Unsupported Arch")),
             },
             _ => Err(anyhow::anyhow!("Unsupported OS")),
