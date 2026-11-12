@@ -40,9 +40,15 @@ fn get_kudu_data_dir() -> PathBuf {
 
 fn get_kudu_run_dir() -> PathBuf {
     if unsafe { USER_UID == 0 } {
-        PathBuf::from("/var/lib/kudu/run")
+        match env::var("XDG_RUNTIME_DIR") {
+            Ok(v) => PathBuf::from(v),
+            Err(_) => PathBuf::from("/var/lib/kudu/run"),
+        }
     } else {
-        PathBuf::from(format!("/run/user/{}/kudu", unsafe { USER_UID }))
+        match env::var("XDG_RUNTIME_DIR") {
+            Ok(v) => PathBuf::from(v),
+            Err(_) => PathBuf::from(format!("/run/user/{}/kudu", unsafe { USER_UID })),
+        }
     }
 }
 
